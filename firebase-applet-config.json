@@ -1,0 +1,10 @@
+{
+  "projectId": "iftu-lms-portal",
+  "appId": "1:469224135688:web:3d759b4cd2fe5e819f85bd",
+  "apiKey": "AIzaSyDsR0vcvqhyT4Z0aEAgoOVjT1tmfh_8HqU",
+  "authDomain": "iftu-lms-portal.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "iftu-lms-portal.firebasestorage.app",
+  "messagingSenderId": "469224135688",
+  "measurementId": "G-WDEHB3WNJR"
+}

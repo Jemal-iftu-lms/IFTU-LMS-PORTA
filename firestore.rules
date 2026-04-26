@@ -1,0 +1,262 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Global Safety Net & Catch-all
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Primitive Helpers
+    // ===============================================================
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    // Path variable hardening
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    // Role Helpers
+    function isHardcodedAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "jemalfano030@gmail.com" ||
+        request.auth.token.email == "jemalfan030@gmail.com" ||
+        request.auth.token.email == "admin@iftu.edu.et"
+      );
+    }
+
+    function isAdmin() {
+      return isHardcodedAdmin() || (
+        isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    function isTeacher() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['teacher', 'teaching_assistant', 'content_creator', 'admin'];
+    }
+
+    // ===============================================================
+    // Validation Blueprints (Eight Pillars)
+    // ===============================================================
+    
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'role']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.role in ['student', 'teacher', 'admin', 'content_creator', 'teaching_assistant', 'guest_user'] &&
+             (!('points' in data) || data.points is number) &&
+             (!('status' in data) || data.status in ['active', 'pending', 'suspended']) &&
+             (!('joinedDate' in data) || data.joinedDate is string) &&
+             (!('preferredLanguage' in data) || data.preferredLanguage is string) &&
+             (!('photo' in data) || data.photo is string) &&
+             (!('nid' in data) || data.nid is string) &&
+             (!('gender' in data) || data.gender is string) &&
+             (!('dob' in data) || data.dob is string) &&
+             (!('phoneNumber' in data) || data.phoneNumber is string) &&
+             (!('address' in data) || data.address is string) &&
+             (!('school' in data) || data.school is string) &&
+             (!('badges' in data) || data.badges is list) &&
+             (!('completedLessons' in data) || data.completedLessons is list) &&
+             (!('completedExams' in data) || data.completedExams is list) &&
+             (!('completedCourses' in data) || data.completedCourses is list) &&
+             (!('certificatesPaid' in data) || data.certificatesPaid is list) &&
+             (!('permissions' in data) || (
+               data.permissions is map &&
+               data.permissions.keys().hasAll(['canManageUsers', 'canManageCourses', 'canManageExams', 'canManageContent', 'canViewReports', 'canConfigureSystem'])
+             ));
+    }
+
+    function isValidCourse(data) {
+      return data.keys().hasAll(['id', 'title', 'code']) &&
+             data.id is string && data.title is string && data.title.size() <= 200 &&
+             data.code is string && data.code.size() <= 50;
+    }
+
+    function isValidExam(data) {
+      return data.keys().hasAll(['id', 'title', 'courseCode', 'status']) &&
+             data.id is string && data.title is string && data.title.size() <= 200 &&
+             data.status in ['draft', 'published', 'closed'];
+    }
+
+    function isValidExamResult(data) {
+      return data.keys().hasAll(['studentId', 'examId', 'score', 'totalPoints']) &&
+             data.studentId == request.auth.uid &&
+             data.score is number && data.totalPoints is number &&
+             data.score >= 0 && data.score <= data.totalPoints;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'type', 'isRead', 'createdAt']) &&
+             data.userId is string && data.title is string && data.message is string &&
+             data.type in ['assignment', 'submission', 'grade'] &&
+             data.isRead is bool &&
+             data.createdAt is string;
+    }
+
+    function isValidAssignment(data) {
+      return data.keys().hasAll(['id', 'title', 'courseCode', 'dueDate']) &&
+             data.id is string && data.title is string && data.title.size() <= 200 &&
+             data.courseCode is string &&
+             data.dueDate is string;
+    }
+
+    function isValidSubmission(data) {
+      return data.keys().hasAll(['studentId', 'assignmentId', 'status']) &&
+             data.studentId is string &&
+             data.assignmentId is string &&
+             data.status in ['submitted', 'graded', 'resubmission_required'] &&
+             (!('content' in data) || data.content is string) &&
+             (!('submittedAt' in data) || data.submittedAt is string) &&
+             (!('grade' in data) || data.grade is number) &&
+             (!('feedback' in data) || data.feedback is string) &&
+             (!('gradedFileUrl' in data) || data.gradedFileUrl is string) &&
+             (!('gradedBy' in data) || data.gradedBy is string) &&
+             (!('gradedAt' in data) || data.gradedAt is string);
+    }
+
+    function isValidVideo(data) {
+      return data.keys().hasAll(['id', 'title', 'url', 'createdBy', 'createdAt']) &&
+             data.id is string && data.title is string && data.url is string &&
+             data.createdBy is string && data.createdAt is string &&
+             (!('description' in data) || data.description is string) &&
+             (!('thumbnailUrl' in data) || data.thumbnailUrl is string) &&
+             (!('subject' in data) || data.subject is string) &&
+             (!('grade' in data) || data.grade is string) &&
+             (!('stream' in data) || data.stream is string) &&
+             (!('tags' in data) || data.tags is list) &&
+             (!('views' in data) || data.views is number);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /videos/{videoId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && (isAdmin() || isTeacher()) && isValidVideo(incoming());
+      allow update: if isVerified() && (isAdmin() || isTeacher()) && isValidVideo(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      // PII Isolation: only owner, admin, or teachers can read private profiles
+      allow get: if isOwner(userId) || isAdmin() || isTeacher();
+      // List is restricted to prevent scraping. Leaderboards should use a public_profiles subcollection.
+      allow list: if isAdmin() || isTeacher();
+      
+      // Fix: Admin should be able to create users
+      allow create: if (isOwner(userId) || isAdmin()) && isValidUser(incoming());
+      
+      allow update: if (
+        (isOwner(userId) && isValidUser(incoming()) && incoming().role == existing().role) || 
+        isAdmin()
+      ) && isValidUser(incoming());
+      
+      allow delete: if isAdmin();
+    }
+
+    match /courses/{courseId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && (isAdmin() || isTeacher()) && isValidCourse(incoming());
+      allow update: if isVerified() && (isAdmin() || isTeacher()) && isValidCourse(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /exams/{examId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && (isAdmin() || isTeacher()) && isValidExam(incoming());
+      allow update: if isVerified() && (isAdmin() || isTeacher()) && isValidExam(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /news/{newsId} {
+      allow read: if isSignedIn();
+      allow write: if isVerified() && isAdmin();
+    }
+
+    match /exam_results/{resultId} {
+      allow get: if isSignedIn() && (existing().studentId == request.auth.uid || isAdmin() || isTeacher());
+      // Admin bypass for list using hardcoded check to avoid cost/limit issues
+      allow list: if isSignedIn() && (resource.data.studentId == request.auth.uid || isHardcodedAdmin() || isAdmin());
+      allow create: if isVerified() && isValidExamResult(incoming());
+      allow update: if isVerified() && (isAdmin() || isTeacher());
+      allow delete: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isHardcodedAdmin() || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isHardcodedAdmin() || isAdmin());
+      // Teachers create notifications for students
+      allow create: if isVerified() && (isSignedIn());
+      allow update: if isVerified() && (
+        (resource.data.userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])) || 
+        isAdmin()
+      );
+      allow delete: if isVerified() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isSignedIn();
+      allow write: if isVerified() && (isAdmin() || isTeacher()) && isValidAssignment(incoming());
+    }
+
+    match /submissions/{submissionId} {
+      allow get: if isSignedIn() && (existing().studentId == request.auth.uid || isAdmin() || isTeacher());
+      allow list: if isSignedIn() && (resource.data.studentId == request.auth.uid || isHardcodedAdmin() || isAdmin() || isTeacher());
+      
+      allow create: if isVerified() && isValidSubmission(incoming()) && (
+        incoming().studentId == request.auth.uid || isAdmin() || isTeacher()
+      );
+      
+      allow update: if isVerified() && isValidSubmission(incoming()) && (
+        // Students can update their own submission if not yet graded (strictly theoretically, usually they resubmit)
+        (isOwner(existing().studentId) && existing().status == 'submitted' && incoming().studentId == existing().studentId) || 
+        // Teachers/Admins can grade
+        isAdmin() || 
+        isTeacher()
+      );
+      
+      allow delete: if (isOwner(existing().studentId) || isAdmin() || isTeacher());
+    }
+
+    match /feedback/{feedbackId} {
+      allow read: if isAdmin();
+      allow create: if isVerified();
+    }
+
+    match /study_halls/{hallId} {
+      allow read: if isSignedIn();
+      allow write: if isVerified();
+      
+      match /messages/{msgId} {
+        allow read: if isSignedIn();
+        allow create: if isVerified() && incoming().senderId == request.auth.uid;
+        allow update, delete: if isVerified() && (existing().senderId == request.auth.uid || isAdmin());
+      }
+      
+      match /notes/{noteId} {
+        allow read: if isSignedIn();
+        allow create: if isVerified() && incoming().authorId == request.auth.uid;
+        allow update, delete: if isVerified() && (existing().authorId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // Special case for initial setup if needed, otherwise protected
+    match /_internal_/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
