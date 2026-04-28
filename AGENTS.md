@@ -31,3 +31,4 @@
 - **Styling:** "Sovereign Brutalist" (Custom).
 - **Backend:** Node.js (Express v4) / Firebase (Firestore, Auth, Storage).
 - **Port:** 3000 enforced.
+
