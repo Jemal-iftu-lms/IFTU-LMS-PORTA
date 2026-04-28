@@ -2,7 +2,7 @@
 import { db, auth } from '../firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, query, where, updateDoc, onSnapshot, Unsubscribe, addDoc, orderBy, limit, getDoc } from 'firebase/firestore';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { User, ExamResult, Course, Exam, News, Assignment, AssignmentSubmission, AppNotification, VideoLabItem } from '../types';
+import { User, ExamResult, Course, Exam, News, Assignment, AssignmentSubmission, AppNotification, VideoLabItem, Question, Grade, Stream, Enrollment } from '../types';
 
 enum OperationType {
   CREATE = 'create',
@@ -312,6 +312,25 @@ export const dbService = {
     }
   },
 
+  // UPLOAD SUBMISSION FILE
+  async uploadSubmissionFile(assignmentId: string, studentId: string, file: File): Promise<string> {
+    const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+    const { storage } = await import('../firebase');
+    
+    // Path: submissions/{assignmentId}/{studentId}_{fileName}
+    const storagePath = `submissions/${assignmentId}/${studentId}_${file.name}`;
+    const storageRef = ref(storage, storagePath);
+    
+    try {
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      return downloadURL;
+    } catch (error) {
+      console.error("Storage Upload Error:", error);
+      throw error;
+    }
+  },
+
   // DELETE SUBMISSION
   async deleteSubmission(id: string) {
     if (!auth.currentUser) return;
@@ -577,6 +596,29 @@ export const dbService = {
   },
 
   // Study Hall (Chat & Notes)
+  async updatePresence(hallId: string, user: User) {
+    const path = `study_halls/${hallId}/presence/${user.id}`;
+    try {
+      await setDoc(doc(db, path), {
+        userId: user.id,
+        userName: user.name,
+        userPhoto: user.photo,
+        lastSeen: Date.now()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  subscribeToPresence(hallId: string, callback: (users: any[]) => void) {
+    const path = `study_halls/${hallId}/presence`;
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    const q = query(collection(db, path), where('lastSeen', '>', fiveMinutesAgo));
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, path));
+  },
+
   subscribeToChat(hallId: string, callback: (messages: any[]) => void) {
     const path = `study_halls/${hallId}/messages`;
     const q = query(collection(db, path), orderBy('timestamp', 'asc'), limit(100));
@@ -713,6 +755,32 @@ export const dbService = {
     }
   },
 
+  // Subject Registry Management
+  async fetchSovereignSubjects(): Promise<Record<string, string[]>> {
+    const path = 'system';
+    try {
+      const docRef = doc(db, path, 'subject_registry');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return docSnap.data() as Record<string, string[]>;
+      }
+      return {};
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `${path}/subject_registry`);
+      return {};
+    }
+  },
+
+  async updateSovereignSubjects(subjects: Record<string, string[]>): Promise<void> {
+    const path = 'system';
+    try {
+      const docRef = doc(db, path, 'subject_registry');
+      await setDoc(docRef, subjects);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `${path}/subject_registry`);
+    }
+  },
+
   async broadcastNotification(notification: Omit<AppNotification, 'id' | 'userId'>) {
     try {
       const users = await this.fetchAllUsers();
@@ -726,5 +794,201 @@ export const dbService = {
     } catch (error) {
        console.error("Broadcast failed:", error);
     }
+  },
+
+  // DISCUSSIONS
+  subscribeToDiscussions(callback: (discussions: any[]) => void) {
+    const path = 'discussions';
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, path, true));
+  },
+
+  async createDiscussion(discussion: any) {
+    const path = 'discussions';
+    try {
+      await setDoc(doc(db, path, discussion.id), discussion);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  // STUDY PLANS
+  async saveStudyPlan(userId: string, plan: any) {
+    const path = 'study_plans';
+    try {
+      await setDoc(doc(db, path, userId), { ...plan, userId, generatedAt: new Date().toISOString() });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  async fetchStudyPlan(userId: string): Promise<any | null> {
+    const path = 'study_plans';
+    try {
+      const docSnap = await getDoc(doc(db, path, userId));
+      return docSnap.exists() ? docSnap.data() : null;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, path);
+      return null;
+    }
+  },
+
+  async measureLatency(): Promise<number> {
+    const start = performance.now();
+    try {
+      // Small read/write test to simulate real load
+      const testRef = doc(db, 'system_health', 'latency_test');
+      await setDoc(testRef, { timestamp: Date.now(), agent: 'Sovereign_Monitor' });
+      await getDoc(testRef);
+      const end = performance.now();
+      return Math.round(end - start);
+    } catch (error) {
+      console.error("Latency check failed:", error);
+      return -1;
+    }
+  },
+
+  async notifyRelevantStudents(notification: Omit<AppNotification, 'id' | 'userId'>, grade: Grade, stream: Stream) {
+    try {
+      const users = await this.fetchAllUsers();
+      const targets = users.filter(user => 
+        user.role === 'student' && 
+        user.grade === grade && 
+        user.stream === stream
+      );
+      const promises = targets.map(user => 
+        this.createNotification({
+          ...notification,
+          userId: user.id,
+        } as AppNotification)
+      );
+      await Promise.all(promises);
+    } catch (error) {
+      console.error("Targeted notification failed:", error);
+    }
+  },
+
+  // QUESTION BANK
+  async fetchQuestionBank(): Promise<Question[]> {
+    const path = 'question_bank';
+    try {
+      const qCol = collection(db, path);
+      const snapshot = await getDocs(qCol);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Question));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+      return [];
+    }
+  },
+
+  async addQuestionToBank(question: Question) {
+    const path = 'question_bank';
+    try {
+      await setDoc(doc(db, path, question.id), question);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  async updateQuestionInBank(question: Question) {
+    const path = 'question_bank';
+    try {
+      await updateDoc(doc(db, path, question.id), { ...question });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  },
+
+  async deleteQuestionFromBank(id: string) {
+    const path = 'question_bank';
+    try {
+      await deleteDoc(doc(db, path, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  // ENROLLMENTS
+  async enrollStudent(userId: string, courseId: string) {
+    const path = 'enrollments';
+    const enrollmentId = `${userId}_${courseId}`;
+    const enrollment: Enrollment = {
+      id: enrollmentId,
+      userId,
+      courseId,
+      enrolledAt: new Date().toISOString(),
+      status: 'active'
+    };
+    try {
+      await setDoc(doc(db, path, enrollmentId), enrollment);
+      
+      // Also update user's enrolledCourses
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as User;
+        const enrolledCourses = Array.from(new Set([...(userData.enrolledCourses || []), courseId]));
+        await updateDoc(userRef, { enrolledCourses });
+      }
+
+      // Update course's enrolledCount
+      const courseRef = doc(db, 'courses', courseId);
+      const courseSnap = await getDoc(courseRef);
+      if (courseSnap.exists()) {
+        const courseData = courseSnap.data() as Course;
+        await updateDoc(courseRef, { enrolledCount: (courseData.enrolledCount || 0) + 1 });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  },
+
+  async unenrollStudent(userId: string, courseId: string) {
+    const path = 'enrollments';
+    const enrollmentId = `${userId}_${courseId}`;
+    try {
+      await deleteDoc(doc(db, path, enrollmentId));
+      
+      // Update user's enrolledCourses
+      const userRef = doc(db, 'users', userId);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const userData = userSnap.data() as User;
+        const enrolledCourses = (userData.enrolledCourses || []).filter(id => id !== courseId);
+        await updateDoc(userRef, { enrolledCourses });
+      }
+
+      // Update course's enrolledCount
+      const courseRef = doc(db, 'courses', courseId);
+      const courseSnap = await getDoc(courseRef);
+      if (courseSnap.exists()) {
+        const courseData = courseSnap.data() as Course;
+        await updateDoc(courseRef, { enrolledCount: Math.max(0, (courseData.enrolledCount || 0) - 1) });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  },
+
+  async fetchCourseEnrollments(courseId: string): Promise<Enrollment[]> {
+    const path = 'enrollments';
+    try {
+      const q = query(collection(db, path), where('courseId', '==', courseId));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Enrollment));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, path);
+      return [];
+    }
+  },
+
+  subscribeToEnrollments(callback: (enrollments: Enrollment[]) => void): Unsubscribe {
+    const path = 'enrollments';
+    const q = collection(db, path);
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Enrollment)));
+    }, (error) => handleFirestoreError(error, OperationType.LIST, path, true));
   }
 };

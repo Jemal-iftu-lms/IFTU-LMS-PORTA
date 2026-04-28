@@ -17,6 +17,8 @@
         "school": { "type": "string" },
         "photo": { "type": "string" },
         "status": { "type": "string" },
+        "badges": { "type": "array", "items": { "type": "object" } },
+        "academicRecords": { "type": "array", "items": { "type": "object" } },
         "permissions": {
           "type": "object",
           "properties": {
@@ -118,10 +120,12 @@
       "description": "A student's submission for an assignment, including grading information.",
       "type": "object",
       "properties": {
+        "id": { "type": "string" },
         "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
         "assignmentId": { "type": "string" },
-        "content": { "type": "string" },
-        "status": { "type": "string", "enum": ["submitted", "graded", "resubmission_required"] },
+        "fileUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["submitted", "graded", "returned", "resubmission_required"] },
         "submittedAt": { "type": "string" },
         "grade": { "type": "number", "description": "The score assigned to the submission." },
         "feedback": { "type": "string", "description": "Teacher's feedback on the submission." },
@@ -159,6 +163,65 @@
         "views": { "type": "number" }
       },
       "required": ["id", "title", "url", "createdBy", "createdAt"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "A reusable question for exams and lessons.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "type": { "type": "string", "enum": ["multiple-choice", "true-false", "fill-in-the-blank", "short-answer"] },
+        "options": { "type": "array", "items": { "type": "string" } },
+        "correctAnswer": { "type": ["number", "string"] },
+        "points": { "type": "number" },
+        "category": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "grade": { "type": "string" },
+        "stream": { "type": "string" },
+        "subject": { "type": "string" },
+        "concept": { "type": "string" }
+      },
+      "required": ["id", "text", "type", "correctAnswer", "points"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A message sent in a study hall chat.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "userId", "userName", "text", "timestamp"]
+    },
+    "Discussion": {
+      "title": "Discussion",
+      "description": "Community forum posts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "StudyPlan": {
+      "title": "StudyPlan",
+      "description": "AI-generated personalized learning path.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "goals": { "type": "array", "items": { "type": "string" } },
+        "generatedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -170,9 +233,21 @@
       "schema": "Course",
       "description": "Course content and lessons."
     },
+    "/discussions/{discussionId}": {
+      "schema": "Discussion",
+      "description": "Forum posts."
+    },
+    "/study_plans/{planId}": {
+      "schema": "StudyPlan",
+      "description": "AI Study Plans."
+    },
     "/exams/{examId}": {
       "schema": "Exam",
       "description": "National and mock exams."
+    },
+    "/question_bank/{questionId}": {
+      "schema": "Question",
+      "description": "Reusable question bank for teachers."
     },
     "/news/{newsId}": {
       "schema": "News",
@@ -202,8 +277,12 @@
        "schema": "VideoLabItem",
        "description": "Educational videos in the National Video Lab."
     },
+    "/system/{docId}": {
+       "schema": "object",
+       "description": "National system configuration and registries (e.g. subject_registry)."
+    },
     "/study_halls/{hallId}/messages/{msgId}": {
-      "schema": "object",
+      "schema": "ChatMessage",
       "description": "Real-time chat messages in study halls."
     },
     "/study_halls/{hallId}/notes/{noteId}": {

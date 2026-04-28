@@ -68,6 +68,7 @@ service cloud.firestore {
              (!('address' in data) || data.address is string) &&
              (!('school' in data) || data.school is string) &&
              (!('badges' in data) || data.badges is list) &&
+             (!('academicRecords' in data) || data.academicRecords is list) &&
              (!('completedLessons' in data) || data.completedLessons is list) &&
              (!('completedExams' in data) || data.completedExams is list) &&
              (!('completedCourses' in data) || data.completedCourses is list) &&
@@ -113,11 +114,13 @@ service cloud.firestore {
     }
 
     function isValidSubmission(data) {
-      return data.keys().hasAll(['studentId', 'assignmentId', 'status']) &&
+      return data.keys().hasAll(['id', 'studentId', 'studentName', 'assignmentId', 'fileUrl', 'status']) &&
+             data.id is string &&
              data.studentId is string &&
+             data.studentName is string &&
              data.assignmentId is string &&
-             data.status in ['submitted', 'graded', 'resubmission_required'] &&
-             (!('content' in data) || data.content is string) &&
+             data.fileUrl is string &&
+             data.status in ['submitted', 'graded', 'returned', 'resubmission_required'] &&
              (!('submittedAt' in data) || data.submittedAt is string) &&
              (!('grade' in data) || data.grade is number) &&
              (!('feedback' in data) || data.feedback is string) &&
@@ -139,9 +142,28 @@ service cloud.firestore {
              (!('views' in data) || data.views is number);
     }
 
+    function isValidQuestion(data) {
+      return data.keys().hasAll(['id', 'text', 'type', 'correctAnswer', 'points']) &&
+             data.id is string && data.text is string && 
+             data.type in ['multiple-choice', 'true-false', 'fill-in-the-blank', 'short-answer'] &&
+             data.points is number &&
+             (!('category' in data) || data.category is string) &&
+             (!('subject' in data) || data.subject is string) &&
+             (!('grade' in data) || data.grade is string) &&
+             (!('stream' in data) || data.stream is string) &&
+             (!('tags' in data) || data.tags is list);
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
+
+    match /question_bank/{questionId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && (isAdmin() || isTeacher()) && isValidQuestion(incoming());
+      allow update: if isVerified() && (isAdmin() || isTeacher()) && isValidQuestion(incoming());
+      allow delete: if isVerified() && (isAdmin() || isTeacher());
+    }
 
     match /videos/{videoId} {
       allow read: if isSignedIn();
@@ -244,6 +266,11 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow create: if isVerified() && incoming().senderId == request.auth.uid;
         allow update, delete: if isVerified() && (existing().senderId == request.auth.uid || isAdmin());
+      }
+
+      match /presence/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isVerified() && userId == request.auth.uid;
       }
       
       match /notes/{noteId} {

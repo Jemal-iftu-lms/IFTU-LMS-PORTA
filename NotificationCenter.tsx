@@ -3,7 +3,7 @@ import { AppNotification } from '../types';
 import { dbService } from '../services/dbService';
 import { auth } from '../firebase';
 import { Bell, X, CheckCircle2, AlertCircle, Info } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NotificationCenterProps {
   userId: string;

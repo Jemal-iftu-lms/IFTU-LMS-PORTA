@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Language, Question, News, Exam, Grade } from "../types";
+import { Language, Question, News, Exam, Grade, Difficulty, QuestionType } from "../types";
 import * as mammoth from "mammoth";
 
 const LANGUAGE_NAMES = {
@@ -21,6 +21,7 @@ export const askTutor = async (
       { text: context ? `Document/Context:\n${context}\n\nQuestion: ${question}` : `Context: General Education\nQuestion: ${question}` }
     ];
     
+    // ... (attachment logic stays same)
     if (attachment) {
       if (attachment.mimeType === 'application/msword') {
         throw new Error("Unsupported MIME type: application/msword. Please convert .doc files to .docx or .pdf.");
@@ -46,18 +47,21 @@ export const askTutor = async (
 
     const response = await ai.models.generateContent({
       model: attachment ? 'gemini-3.1-pro-preview' : 'gemini-3-flash-preview',
-      contents: { parts },
+      contents: [{ parts }],
       config: {
         systemInstruction: `You are IFTU AI, the official digital tutor for the Ethiopian National Curriculum (EAES Standards). 
-        You MUST support the following languages: English, Amharic, and Afan Oromo.
+        Greetings like 'Akam', 'Selam', 'Hello' should be met with professional greetings and an offer to help with studies.
         The student is currently using ${LANGUAGE_NAMES[language as keyof typeof LANGUAGE_NAMES] || 'English'}.`,
         temperature: 0.7,
       }
     });
     return response.text;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Error:", error);
-    return "I'm sorry, the connection to the National AI Lab was interrupted.";
+    if (error?.message?.includes("Safety")) {
+      return "I'm sorry, I cannot discuss this topic as it conflicts with safety guidelines.";
+    }
+    return "I'm sorry, the connection to the National AI Lab was interrupted. Please check your internet or try a different question.";
   }
 };
 
@@ -295,6 +299,8 @@ export const generateExamQuestions = async (
 
 export const generateQuizFromLessonContent = async (
   content: string,
+  difficulty: Difficulty = 'Medium',
+  questionTypes: QuestionType[] = ['multiple-choice'],
   count: number = 5
 ): Promise<Partial<Question>[]> => {
   const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '' });
@@ -305,15 +311,20 @@ export const generateQuizFromLessonContent = async (
       
       Content: ${content}
       
+      Difficulty Level: ${difficulty}
+      Question Types to include: ${questionTypes.join(', ')}
+      
       Strict Rules for Question Types:
       1. 'multiple-choice': Provide exactly 4 distinct options. 'correctAnswer' MUST be the index (0, 1, 2, or 3) of the correct option.
       2. 'true-false': Provide exactly 2 options: ["True", "False"]. 'correctAnswer' MUST be 0 for True or 1 for False.
+      3. 'fill-in-the-blank': 'options' MUST be an empty array []. 'correctAnswer' MUST be the exact string of the correct word or phrase.
+      4. 'short-answer': 'options' MUST be an empty array []. 'correctAnswer' MUST be a concise model answer string.
       
       Each question must have:
       - 'text': The question prompt.
-      - 'type': Either 'multiple-choice' or 'true-false'.
-      - 'points': An appropriate integer value (e.g., 5 or 10).
-      - 'category': A specific sub-topic covered in the content.`,
+      - 'type': Exactly one of the requested formats.
+      - 'points': An appropriate integer value based on complexity (e.g., 2 for easy, 5 for medium, 10 for hard).
+      - 'category': A specific sub-topic or concept covered in the content.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -322,9 +333,9 @@ export const generateQuizFromLessonContent = async (
             type: Type.OBJECT,
             properties: {
               text: { type: Type.STRING },
-              type: { type: Type.STRING, description: "One of: multiple-choice, true-false" },
+              type: { type: Type.STRING, description: "One of: multiple-choice, true-false, fill-in-the-blank, short-answer" },
               options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              correctAnswer: { type: Type.STRING, description: "Index (0-3) as string" },
+              correctAnswer: { type: Type.STRING, description: "Index (0-3) for MC/TF, or text answer for FITB/SA" },
               points: { type: Type.INTEGER },
               category: { type: Type.STRING }
             },
@@ -335,12 +346,85 @@ export const generateQuizFromLessonContent = async (
     });
     
     const parsed = JSON.parse(response.text || "[]");
-    return parsed.map((q: any) => ({
-      ...q,
-      correctAnswer: parseInt(q.correctAnswer) || 0
-    }));
+    return parsed.map((q: any) => {
+      let normalizedAnswer: string | number = q.correctAnswer;
+      if (q.type === 'multiple-choice' || q.type === 'true-false') {
+        normalizedAnswer = parseInt(q.correctAnswer);
+        if (isNaN(normalizedAnswer)) normalizedAnswer = 0;
+      }
+      return {
+        ...q,
+        correctAnswer: normalizedAnswer
+      };
+    });
   } catch (error) { 
     console.error("Lesson Quiz Generation Error:", error);
+    return []; 
+  }
+};
+
+export const generateLessonCheckpoints = async (
+  content: string,
+  language: Language = 'en'
+): Promise<{ question: Partial<Question>, context: string }[]> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '' });
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-pro-preview',
+      contents: `Analyze the following lesson content and generate 3 "Checkpoints". 
+      A Checkpoint is a question that verifies understanding of a specific paragraph or concept.
+      
+      Content: ${content}
+      
+      For each Checkpoint:
+      1. Provide a 'context' snippet: A very short quote or summary of the paragraph this question is testing (max 15 words).
+      2. Provide a 'question' object with:
+         - 'text': The question prompt.
+         - 'type': 'multiple-choice' or 'fill-in-the-blank'.
+         - 'options': Exactly 4 for 'multiple-choice', empty [] for 'fill-in-the-blank'.
+         - 'correctAnswer': Index (0-3) for MC, or exact string for FITB.
+         - 'points': 5.
+         - 'category': "Checkpoint".
+      
+      Ensure questions are strictly based on the text.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              context: { type: Type.STRING },
+              question: {
+                type: Type.OBJECT,
+                properties: {
+                  text: { type: Type.STRING },
+                  type: { type: Type.STRING },
+                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  correctAnswer: { type: Type.STRING },
+                  points: { type: Type.INTEGER },
+                  category: { type: Type.STRING }
+                },
+                required: ["text", "type", "options", "correctAnswer", "points", "category"]
+              }
+            },
+            required: ["context", "question"]
+          }
+        },
+        systemInstruction: `Explain in ${LANGUAGE_NAMES[language as keyof typeof LANGUAGE_NAMES] || 'English'}.`
+      }
+    });
+    
+    const parsed = JSON.parse(response.text || "[]");
+    return parsed.map((item: any) => ({
+      ...item,
+      question: {
+        ...item.question,
+        correctAnswer: item.question.type === 'multiple-choice' ? parseInt(item.question.correctAnswer) || 0 : item.question.correctAnswer
+      }
+    }));
+  } catch (error) { 
+    console.error("Checkpoint Generation Error:", error);
     return []; 
   }
 };

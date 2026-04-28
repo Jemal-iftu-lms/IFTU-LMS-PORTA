@@ -1,14 +1,15 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, Sparkles, CheckCircle, Circle, PlayCircle, FileText, HelpCircle, Send, Trophy } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw, Sparkles, CheckCircle, Circle, PlayCircle, FileText, HelpCircle, Send, Trophy, Brain } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Course, Lesson, Question, Language, User, AssignmentSubmission } from '../types';
-import { getLessonDeepDive } from '../services/geminiService';
+import { getLessonDeepDive, generateLessonCheckpoints } from '../services/geminiService';
 import Markdown from 'react-markdown';
 import { dbService } from '../services/dbService';
 import LiveInterviewer from './LiveInterviewer';
 import CertificatePortal from './CertificatePortal';
 import VideoPlayer from './VideoPlayer';
+import LessonCheckpoint from './LessonCheckpoint';
 
 const SovereignSkeleton: React.FC<{ className?: string }> = ({ className = "" }) => (
   <div className={`animate-pulse bg-gray-200 border-4 border-black/5 rounded-2xl ${className}`}>
@@ -148,6 +149,7 @@ interface CourseViewerProps {
   currentUser: User | null;
   onUserUpdate: (user: User) => void;
   language?: Language;
+  onOpenTutor?: (content: string, title: string, prompt?: string) => void;
 }
 
 const CourseViewer: React.FC<CourseViewerProps> = ({ 
@@ -156,7 +158,8 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
   onClose, 
   currentUser,
   onUserUpdate,
-  language = 'en' 
+  language = 'en',
+  onOpenTutor
 }) => {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(
     course.lessons.find(l => l.id === initialLessonId) || course.lessons[0] || null
@@ -172,6 +175,16 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
   const [showQuiz, setShowQuiz] = useState(false);
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
   const [showPrerequisiteLocked, setShowPrerequisiteLocked] = useState(false);
+  const [lessonCheckpoints, setLessonCheckpoints] = useState<{ question: Partial<Question>, context: string }[]>([]);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+
+  const handleSynthesizeCheckpoints = async () => {
+    if (!activeLesson || isSynthesizing) return;
+    setIsSynthesizing(true);
+    const checkpoints = await generateLessonCheckpoints(activeLesson.content, language as Language);
+    setLessonCheckpoints(checkpoints);
+    setIsSynthesizing(false);
+  };
 
   const missingPrerequisites = useMemo(() => {
     if (!course.prerequisites || course.prerequisites.length === 0) return [];
@@ -307,6 +320,7 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
         setTimeout(() => {
           setActiveLesson(course.lessons[currentIdx + 1]);
           setDeepDive({ content: '', type: null });
+          setLessonCheckpoints([]);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }, 1500);
       } else if (isCourseComplete) {
@@ -418,6 +432,7 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
                           setActiveLesson(lesson);
                           setShowMobileSidebar(false);
                           setDeepDive({ content: '', type: null });
+                          setLessonCheckpoints([]);
                         }}
                         className={`w-full flex items-center gap-4 p-5 rounded-2xl border-4 font-black transition-all ${isActive ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(37,99,235,1)]' : isCompleted ? 'bg-green-50 border-green-200' : 'bg-white border-black/5'}`}
                       >
@@ -468,6 +483,7 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
                     setDeepDive({ content: '', type: null }); 
                     setShowQuiz(false);
                     setShowCompletionScreen(false);
+                    setLessonCheckpoints([]);
                   }}
                   className={`
                     w-full group relative flex items-center gap-4 p-5 rounded-2xl border-4 text-left transition-all
@@ -707,7 +723,42 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
                 
                 <div className="bg-white p-10 md:p-20 rounded-[4rem] border-8 border-black shadow-[25px_25px_0px_0px_rgba(0,0,0,1)] space-y-12">
                   <div className="flex flex-col gap-6">
-                    <h1 className="text-5xl md:text-8xl font-black uppercase tracking-tighter italic leading-none">{activeLesson.title}</h1>
+                    <div className="flex items-center justify-between">
+                      <h1 className="text-5xl md:text-8xl font-black uppercase tracking-tighter italic leading-none">{activeLesson.title}</h1>
+                      <button 
+                        onClick={() => {
+                          if (onOpenTutor && activeLesson) {
+                            onOpenTutor(activeLesson.content, activeLesson.title);
+                          }
+                        }}
+                        className="flex flex-col items-center gap-2 p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border-4 border-black bg-blue-600 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all"
+                      >
+                        <Brain size={24} />
+                        <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-center">Ask AI <br className="hidden md:block"/>Tutor</span>
+                      </button>
+                      <button 
+                        onClick={handleSynthesizeCheckpoints}
+                        disabled={isSynthesizing || lessonCheckpoints.length > 0}
+                        className={`flex flex-col items-center gap-2 p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border-4 border-black transition-all ${isSynthesizing ? 'bg-gray-100' : lessonCheckpoints.length > 0 ? 'bg-green-500 text-white' : 'bg-indigo-600 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none'}`}
+                      >
+                        {isSynthesizing ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+                            <span className="text-[10px] font-black uppercase tracking-widest hidden md:inline">Synthesizing...</span>
+                          </div>
+                        ) : lessonCheckpoints.length > 0 ? (
+                          <>
+                            <CheckCircle className="w-5 h-5 md:w-6 md:h-6" />
+                            <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest">Active</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
+                            <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-center">Interactive <br className="hidden md:block"/>Mode</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap gap-4">
                       <button 
                         onClick={() => handleDeepDive('simpler')} 
@@ -725,7 +776,30 @@ const CourseViewer: React.FC<CourseViewerProps> = ({
                     </div>
                   </div>
                   <div className="prose prose-2xl max-w-none text-gray-700 leading-relaxed">
-                    <Markdown>{activeLesson.content}</Markdown>
+                    {lessonCheckpoints.length > 0 ? (
+                      activeLesson.content.split('\n\n').map((para, pIdx) => (
+                        <React.Fragment key={pIdx}>
+                          <div className="mb-8">
+                            <Markdown>{para}</Markdown>
+                          </div>
+                          {/* Inject checkpoint after roughly 1/3rd intervals of content */}
+                          {pIdx === Math.floor(activeLesson.content.split('\n\n').length / 3) && lessonCheckpoints[0] && (
+                            <LessonCheckpoint 
+                              checkpoint={lessonCheckpoints[0]} 
+                              onCorrect={(pts) => onUserUpdate({ ...currentUser!, points: currentUser!.points + pts })} 
+                            />
+                          )}
+                          {pIdx === Math.floor(2 * activeLesson.content.split('\n\n').length / 3) && lessonCheckpoints[1] && (
+                            <LessonCheckpoint 
+                              checkpoint={lessonCheckpoints[1]} 
+                              onCorrect={(pts) => onUserUpdate({ ...currentUser!, points: currentUser!.points + pts })} 
+                            />
+                          )}
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      <Markdown>{activeLesson.content}</Markdown>
+                    )}
                   </div>
                   <div className="pt-10 flex justify-center">
                     <button 

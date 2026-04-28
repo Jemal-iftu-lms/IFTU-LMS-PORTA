@@ -73,6 +73,8 @@ const Header: React.FC<HeaderProps> = ({
     { id: 'exams', roles: ['student'] },
     { id: 'assignments', roles: ['student', 'teacher', 'admin', 'teaching_assistant', 'content_creator'] },
     { id: 'studyhall', roles: ['student'] },
+    { id: 'forum', roles: ['student', 'teacher', 'admin', 'teaching_assistant', 'content_creator'] },
+    { id: 'planner', roles: ['student'] },
     { id: 'tutor', roles: ['student'] },
     { id: 'performance', roles: ['student'] },
     { id: 'leaderboard', roles: ['student', 'teacher', 'admin'] },
@@ -81,7 +83,6 @@ const Header: React.FC<HeaderProps> = ({
     { id: 'teacher', roles: ['teacher', 'teaching_assistant', 'content_creator', 'admin'] },
     { id: 'locator', roles: ['student', 'teacher', 'admin', 'teaching_assistant', 'content_creator', 'guest_user'] },
     { id: 'guide', roles: ['student', 'teacher', 'admin', 'teaching_assistant', 'content_creator', 'guest_user'] },
-    { id: 'projectreport', roles: ['student', 'teacher', 'admin', 'teaching_assistant', 'content_creator', 'guest_user'] },
     { id: 'about', roles: ['student', 'teacher', 'admin', 'teaching_assistant', 'content_creator', 'guest_user'] },
   ];
 
@@ -120,7 +121,7 @@ const Header: React.FC<HeaderProps> = ({
             {/* Desktop Navigation (Moved to Left) */}
             <nav className="hidden xl:flex items-center bg-gray-50 border-8 border-black rounded-[3rem] px-8 h-20 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
               <div className="flex items-center gap-4">
-                {navConfig.slice(0, 8).map((item) => (
+                {navConfig.slice(0, 11).map((item) => (
                   <RoleGuard 
                     key={item.id} 
                     currentUser={currentUserMock} 

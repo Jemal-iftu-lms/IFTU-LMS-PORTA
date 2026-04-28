@@ -38,6 +38,21 @@ const ProjectReportPortal: React.FC = () => {
     vision: "Barnoota qulqullina qabu, AI-n deeggarame kan duudhaalee biyyaalessaa fi birmadummaa dijitaalaa kabaju dhiyeessuun garaagarummaa dijitaalaa Itoophiyaa keessa jiru dhiphisuuf."
   };
 
+  const reportContentAm = {
+    title: "የኢፍቱ ብሔራዊ ዲጂታል ሉዓላዊ የትምህርት ማዕከል",
+    summary: "ለኢትዮጵያ ዲጂታል ሉዓላዊነት ተብሎ የተነደፈ ዘመናዊ የመማሪያ አስተዳደር ሥርዓት (LMS) ሲሆን፣ ተማሪዎችን እና መምህራንን በሰው ሰራሽ አስተውሎት (AI) የታገዙ መሣሪያዎችን እና ከብሔራዊ ሥርዓተ ትምህርት ጋር የተጣጣሙ ይዘቶችን ያቀርባል።",
+    features: [
+      "ሉዓላዊ ማንነት፡- ለተማሪዎች መዝገብ ደህንነት ከብሔራዊ መታወቂያ ጋር የተገናኘ።",
+      "በAI የታገዘ ትምህርት፡- ትምህርቶችን በቀላሉ የመረዳት እና የላቀ ይዘት የማመንጨት ችሎታ።",
+      "ብሔራዊ ሥርዓተ ትምህርት፡- ከ9-12ኛ ክፍል እና ለTVET ኮሌጆች የተሟላ ይዘት።",
+      "የመምህራን ማዕከል፡- በAI የታገዘ የፈተና ዝግጅት እና የሥርዓተ ትምህርት ቀረጻ።",
+      "ከኢንተርኔት ውጭ የሚሠራ (Offline-First)፡- የኢንተርኔት አገልግሎት ለማይገኝባቸው አካባቢዎች የተመቻቸ።"
+    ],
+    technical: "በReact 19, TypeScript, Tailwind CSS v4, እና Firebase የተገነባ። ለላቀ የትምህርት ጥራት የሰው ሰራሽ አስተውሎትን ይጠቀማል።",
+    architecture: "የኢፍቱ ፕላትፎርም የተማከለ የሉዓላዊነት ሥነ-ሕንጻን ይጠቀማል፣ ይህም የትምህርት መረጃዎች በብሔራዊ የዲጂታል ድንበሮች ውስጥ መቆየታቸውን ያረጋግጣል።",
+    vision: "ብሔራዊ እሴቶችን እና ዲጂታል ሉዓላዊነትን የሚያከብር ጥራት ያለው ትምህርት በማቅረብ የኢትዮጵያን ዲጂታል ልዩነት ማጥበብ።"
+  };
+
   const generatePDF = (doc: jsPDF, content: typeof reportContentEn) => {
     doc.setFontSize(22);
     doc.text(content.title, 20, 30);
@@ -123,6 +138,12 @@ const ProjectReportPortal: React.FC = () => {
       const pdfOmBlob = pdfOm.output('blob');
       zip.file("IFTU_Gabaasa_Piroojektii_OM.pdf", pdfOmBlob);
 
+      // Generate Amharic PDF
+      const pdfAm = new jsPDF();
+      generatePDF(pdfAm, reportContentAm);
+      const pdfAmBlob = pdfAm.output('blob');
+      zip.file("IFTU_Project_Report_AM.pdf", pdfAmBlob);
+
       // Generate English PPT
       const pptEn = new pptxgen();
       generatePPT(pptEn, reportContentEn);
@@ -150,7 +171,7 @@ const ProjectReportPortal: React.FC = () => {
     <div className="max-w-6xl mx-auto space-y-16 py-12 animate-fadeIn">
       <div className="flex flex-col md:flex-row justify-between items-end gap-10 border-b-8 border-black pb-10">
         <div>
-          <h2 className="text-8xl font-black uppercase italic tracking-tighter text-blue-900 leading-none">Project Report.</h2>
+          <h2 className="text-6xl md:text-8xl font-black uppercase italic tracking-tighter text-blue-900 leading-none">Project Report.</h2>
           <p className="text-blue-600 font-black uppercase text-sm mt-4 tracking-[0.3em]">National Documentation Registry</p>
         </div>
         <button 
@@ -158,21 +179,21 @@ const ProjectReportPortal: React.FC = () => {
           disabled={isGenerating}
           className="bg-black text-white px-12 py-6 rounded-[2.5rem] border-8 border-black font-black uppercase text-xl shadow-[12px_12px_0px_0px_rgba(59,130,246,1)] hover:translate-y-2 transition-all flex items-center gap-4 disabled:opacity-50"
         >
-          {isGenerating ? 'Synthesizing...' : '📦 Download Documentation (ZIP)'}
+          {isGenerating ? 'Synthesizing...' : '📦 Source Package (ZIP)'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* English Section */}
-        <div className="bg-white border-8 border-black rounded-[4rem] p-12 space-y-8 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)]">
+        <div className="bg-white border-8 border-black rounded-[4rem] p-10 space-y-8 shadow-[15px_15px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-4">
             <span className="text-4xl">🇬🇧</span>
-            <h3 className="text-4xl font-black uppercase italic tracking-tighter">English Version</h3>
+            <h3 className="text-3xl font-black uppercase italic tracking-tighter">English Info</h3>
           </div>
           <div className="space-y-6 text-xl font-bold text-gray-700">
-            <p className="text-3xl font-black text-blue-900 uppercase">{reportContentEn.title}</p>
-            <p className="italic leading-relaxed">{reportContentEn.summary}</p>
-            <ul className="space-y-4">
+            <p className="text-2xl font-black text-blue-900 uppercase">{reportContentEn.title}</p>
+            <p className="text-sm italic leading-relaxed">{reportContentEn.summary}</p>
+            <ul className="space-y-3 text-sm">
               {reportContentEn.features.map((f, i) => (
                 <li key={i} className="flex gap-4">
                   <span className="text-blue-600">◈</span>
@@ -183,16 +204,36 @@ const ProjectReportPortal: React.FC = () => {
           </div>
         </div>
 
-        {/* Afan Oromo Section */}
-        <div className="bg-white border-8 border-black rounded-[4rem] p-12 space-y-8 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)]">
+        {/* Amharic Section */}
+        <div className="bg-white border-8 border-black rounded-[4rem] p-10 space-y-8 shadow-[15px_15px_0px_0px_rgba(0,0,0,1)]">
           <div className="flex items-center gap-4">
             <span className="text-4xl">🇪🇹</span>
-            <h3 className="text-4xl font-black uppercase italic tracking-tighter">Afan Oromo</h3>
+            <h3 className="text-3xl font-black uppercase italic tracking-tighter">Amharic</h3>
           </div>
           <div className="space-y-6 text-xl font-bold text-gray-700">
-            <p className="text-3xl font-black text-red-600 uppercase">{reportContentOm.title}</p>
-            <p className="italic leading-relaxed">{reportContentOm.summary}</p>
-            <ul className="space-y-4">
+            <p className="text-2xl font-black text-green-700 uppercase">{reportContentAm.title}</p>
+            <p className="text-sm italic leading-relaxed">{reportContentAm.summary}</p>
+            <ul className="space-y-3 text-sm">
+              {reportContentAm.features.map((f, i) => (
+                <li key={i} className="flex gap-4">
+                  <span className="text-green-600">◈</span>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Afan Oromo Section */}
+        <div className="bg-white border-8 border-black rounded-[4rem] p-10 space-y-8 shadow-[15px_15px_0px_0px_rgba(0,0,0,1)]">
+          <div className="flex items-center gap-4">
+            <span className="text-4xl">🇪🇹</span>
+            <h3 className="text-3xl font-black uppercase italic tracking-tighter">Afan Oromo</h3>
+          </div>
+          <div className="space-y-6 text-xl font-bold text-gray-700">
+            <p className="text-2xl font-black text-red-600 uppercase">{reportContentOm.title}</p>
+            <p className="text-sm italic leading-relaxed">{reportContentOm.summary}</p>
+            <ul className="space-y-3 text-sm">
               {reportContentOm.features.map((f, i) => (
                 <li key={i} className="flex gap-4">
                   <span className="text-red-600">◈</span>

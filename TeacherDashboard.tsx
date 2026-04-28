@@ -9,6 +9,152 @@ import { getEthiopianDateString } from '../lib/dateUtils';
 import { NotificationCenter } from './NotificationCenter';
 import { VideoGenerator } from './VideoGenerator';
 import { getSubjectsBySelection } from '../constants';
+import { motion } from 'framer-motion';
+
+const PreviewExamModal: React.FC<{ 
+  exam: Partial<Exam>, 
+  currentUser: User,
+  onClose: () => void, 
+  onConfirm: () => void 
+}> = ({ exam, currentUser, onClose, onConfirm }) => {
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  if (isConfirming) {
+    return (
+      <div className="fixed inset-0 z-[8000] bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+        <motion.div 
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="bg-white border-[12px] border-black rounded-[5rem] p-12 md:p-20 max-w-2xl w-full text-center space-y-10 shadow-[30px_30px_0px_0px_rgba(59,130,246,1)]"
+        >
+          <div className="w-32 h-32 bg-blue-600 border-8 border-black rounded-[2.5rem] flex items-center justify-center text-6xl mx-auto shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+            🛡️
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">Security Clearance.</h3>
+            <p className="text-xl font-black text-slate-500 uppercase tracking-widest italic">Proceed with deployment to the Sovereign Registry?</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 text-left p-8 bg-blue-50 border-4 border-black rounded-[3rem]">
+            <div className="flex justify-between border-b-2 border-black/10 pb-2">
+              <span className="font-black uppercase text-[10px] text-slate-400">Initiator</span>
+              <span className="font-black uppercase italic text-blue-600">{currentUser.name} ({currentUser.role.replace('_', ' ')})</span>
+            </div>
+            <div className="flex justify-between border-b-2 border-black/10 pb-2">
+              <span className="font-black uppercase text-[10px] text-slate-400">Payload Title</span>
+              <span className="font-black uppercase italic text-black">{exam.title}</span>
+            </div>
+            <div className="flex justify-between border-b-2 border-black/10 pb-2">
+              <span className="font-black uppercase text-[10px] text-slate-400">Registry Path</span>
+              <span className="font-black uppercase italic text-black">{exam.subject} • {exam.grade}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="font-black uppercase text-[10px] text-slate-400">Total Intel</span>
+              <span className="font-black uppercase italic text-black">{exam.questions?.length} Qs • {exam.totalPoints} Pts</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <button 
+              onClick={onConfirm}
+              className="w-full py-8 bg-blue-600 text-white border-8 border-black rounded-[2.5rem] font-black uppercase text-3xl shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-2 active:shadow-none transition-all flex items-center justify-center gap-4"
+            >
+              Confirm Deployment →
+            </button>
+            <button 
+              onClick={() => setIsConfirming(false)}
+              className="w-full py-6 bg-white border-4 border-black rounded-2xl font-black uppercase text-xl hover:bg-slate-50 transition-all text-slate-400"
+            >
+              ← Back to Review
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[7000] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 md:p-10 animate-fadeIn">
+      <div className="bg-white border-[12px] border-black rounded-[5rem] w-full max-w-5xl h-[90vh] flex flex-col shadow-[40px_40px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-8 ethiopian-gradient"></div>
+        
+        <div className="p-8 md:p-14 flex-1 overflow-y-auto space-y-12 custom-scrollbar">
+          <div className="flex justify-between items-start border-b-8 border-black pb-8">
+            <div className="space-y-4">
+              <span className="px-4 py-1 bg-blue-600 text-white rounded-lg font-black uppercase text-[10px] tracking-widest">Sovereign Registry Preview</span>
+              <h2 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">{exam.title || 'Untitled Exam'}</h2>
+              <div className="flex flex-wrap gap-4 text-sm md:text-xl font-black uppercase italic text-slate-400">
+                <span className="text-blue-600">{exam.subject}</span>
+                <span>•</span>
+                <span>{exam.grade}</span>
+                <span>•</span>
+                <span>{exam.questions?.length} Questions</span>
+                <span>•</span>
+                <span className="text-black">{exam.totalPoints} Total PTS</span>
+              </div>
+            </div>
+            <button onClick={onClose} className="w-14 h-14 bg-rose-50 border-4 border-black rounded-[1.5rem] flex items-center justify-center text-2xl font-black hover:bg-rose-100 transition-colors shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 active:shadow-none">✕</button>
+          </div>
+
+          <div className="space-y-8">
+            {exam.questions?.map((q, idx) => (
+              <div key={q.id} className="p-8 bg-slate-50 border-4 border-black rounded-[2.5rem] space-y-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.05)]">
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex gap-4 items-start">
+                    <span className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center shrink-0 font-black text-xl">{idx + 1}</span>
+                    <p className="text-2xl font-black uppercase tracking-tight italic">{q.text}</p>
+                  </div>
+                  <span className="px-3 py-1 bg-white border-2 border-black rounded-lg font-black text-[10px] uppercase shadow-sm shrink-0 mt-1">{q.points} PTS</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ml-0 md:ml-14">
+                  {q.type === 'multiple-choice' ? (
+                    q.options.map((opt, oIdx) => (
+                      <div 
+                        key={oIdx}
+                        className={`p-4 rounded-xl border-4 border-black font-black uppercase text-sm transition-all flex items-center gap-3 ${
+                          oIdx === q.correctAnswer 
+                            ? 'bg-amber-400 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
+                            : 'bg-white'
+                        }`}
+                      >
+                        <span className={`w-6 h-6 border-2 border-black rounded-lg flex items-center justify-center text-[10px] ${oIdx === q.correctAnswer ? 'bg-black text-amber-400' : 'bg-slate-100'}`}>
+                          {String.fromCharCode(65 + oIdx)}
+                        </span>
+                        <span className="flex-1">{opt}</span>
+                        {oIdx === q.correctAnswer && <span className="font-black">✅</span>}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-2 p-4 bg-amber-50 border-4 border-black rounded-xl">
+                      <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest block mb-1">Standardized Response Key:</span>
+                      <span className="text-xl font-black uppercase italic">{q.correctAnswer}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-8 border-t-[10px] border-black bg-white flex flex-col md:flex-row gap-6 shrink-0">
+          <button 
+            onClick={onClose}
+            className="flex-1 py-6 bg-rose-50 border-4 border-black rounded-2xl font-black uppercase text-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-rose-100 active:translate-y-1 active:shadow-none transition-all"
+          >
+            ← Modify Draft
+          </button>
+          <button 
+            onClick={() => setIsConfirming(true)}
+            className="flex-1 py-6 bg-blue-600 text-white border-4 border-black rounded-2xl font-black uppercase text-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-700 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3"
+          >
+            Launch to Registry →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface TeacherDashboardProps {
   currentUser: User;
@@ -157,6 +303,365 @@ const AssignmentModal = ({ isOpen, onClose, onSave, assignment, courses }: { isO
   );
 };
 
+const QuestionBankView: React.FC<{
+  questions: Question[],
+  onUpdate: (q: Question) => void,
+  onDelete: (id: string) => void,
+  onAdd: (q: Question) => void
+}> = ({ questions, onUpdate, onDelete, onAdd }) => {
+  const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState<QuestionType | 'all'>('all');
+  const [filterSubject, setFilterSubject] = useState('all');
+  const [isAdding, setIsAdding] = useState(false);
+  const [newQ, setNewQ] = useState<Partial<Question>>({
+    text: '',
+    type: 'multiple-choice',
+    options: ['', '', '', ''],
+    correctAnswer: 0,
+    points: 10,
+    category: 'General',
+    tags: []
+  });
+
+  const subjects = Array.from(new Set(questions.map(q => q.subject).filter(Boolean)));
+
+  const filtered = questions.filter(q => {
+    const matchesSearch = q.text.toLowerCase().includes(search.toLowerCase()) || 
+                          q.category.toLowerCase().includes(search.toLowerCase());
+    const matchesType = filterType === 'all' || q.type === filterType;
+    const matchesSubject = filterSubject === 'all' || q.subject === filterSubject;
+    return matchesSearch && matchesType && matchesSubject;
+  });
+
+  return (
+    <div className="space-y-12 animate-fadeIn">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 border-b-8 border-black pb-10">
+        <div className="space-y-4">
+          <h2 className="text-4xl md:text-7xl font-black uppercase italic tracking-tighter leading-none">Intelligence Bank.</h2>
+          <p className="text-sm font-black text-slate-500 uppercase tracking-widest">Global Question Registry for National Assessment</p>
+        </div>
+        <button 
+          onClick={() => setIsAdding(true)}
+          className="px-12 py-6 bg-indigo-600 text-white border-4 border-black rounded-3xl font-black uppercase text-xl shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] hover:translate-y-2 active:translate-y-4 transition-all"
+        >
+          + Add New Intel
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className="md:col-span-2">
+          <input 
+            type="text" 
+            placeholder="Search Intelligence Registry..." 
+            className="w-full p-6 border-4 border-black rounded-2xl font-black text-xl italic uppercase tracking-tighter outline-none bg-white shadow-inner"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <select 
+          className="p-6 border-4 border-black rounded-2xl font-black uppercase text-sm bg-white"
+          value={filterType}
+          onChange={e => setFilterType(e.target.value as any)}
+        >
+          <option value="all">All Payload Types</option>
+          <option value="multiple-choice">Multiple Choice</option>
+          <option value="true-false">True/False</option>
+          <option value="fill-in-the-blank">Fill-in-the-blank</option>
+          <option value="short-answer">Short Answer</option>
+        </select>
+        <select 
+          className="p-6 border-4 border-black rounded-2xl font-black uppercase text-sm bg-white"
+          value={filterSubject}
+          onChange={e => setFilterSubject(e.target.value)}
+        >
+          <option value="all">All Domain Subjects</option>
+          {subjects.map(s => <option key={s} value={s!}>{s}</option>)}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8">
+        {filtered.map(q => (
+          <div key={q.id} className="p-10 bg-white border-8 border-black rounded-[4rem] flex flex-col md:flex-row gap-10 shadow-[15px_15px_0_0_rgba(0,0,0,1)] relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-8 h-full bg-indigo-600"></div>
+            <div className="flex-1 ml-4 space-y-6">
+              <div className="flex flex-wrap gap-4 items-center">
+                <span className="px-3 py-1 bg-indigo-100 border-2 border-black rounded-lg text-[10px] font-black uppercase">{q.type}</span>
+                <span className="px-3 py-1 bg-amber-100 border-2 border-black rounded-lg text-[10px] font-black uppercase">{q.subject}</span>
+                <span className="px-3 py-1 bg-slate-100 border-2 border-black rounded-lg text-[10px] font-black uppercase">{q.grade}</span>
+                <span className="flex-1"></span>
+                <span className="text-xl font-black uppercase italic text-indigo-600">{q.points} PTS</span>
+              </div>
+              <p className="text-3xl font-black uppercase italic tracking-tighter leading-tight">"{q.text}"</p>
+              <div className="flex flex-wrap gap-2">
+                {q.tags?.map(tag => (
+                  <span key={tag} className="px-2 py-0.5 bg-gray-50 border border-black rounded text-[8px] font-bold uppercase">#{tag}</span>
+                ))}
+              </div>
+            </div>
+            <div className="flex md:flex-col gap-4 justify-center md:items-end w-full md:w-auto">
+              <button 
+                onClick={() => onDelete(q.id)}
+                className="p-4 bg-rose-50 border-4 border-black rounded-2xl hover:bg-rose-100 transition-colors"
+                title="Purge Intel"
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isAdding && (
+        <div className="fixed inset-0 z-[8000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white border-8 border-black rounded-[4rem] w-full max-w-4xl p-12 space-y-8 animate-scaleIn my-10">
+            <h3 className="text-4xl font-black uppercase italic border-b-4 border-black pb-4">New Intelligence Fragment</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Payload Logic (Question Text)</label>
+                  <textarea 
+                    className="w-full p-6 border-4 border-black rounded-2xl font-black h-32 outline-none focus:bg-gray-50 transition-all"
+                    placeholder="Enter the question text here..."
+                    value={newQ.text}
+                    onChange={e => setNewQ({...newQ, text: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Intel Type</label>
+                    <select 
+                      className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                      value={newQ.type}
+                      onChange={e => setNewQ({...newQ, type: e.target.value as any, options: e.target.value === 'multiple-choice' ? ['', '', '', ''] : e.target.value === 'true-false' ? ['True', 'False'] : []})}
+                    >
+                      <option value="multiple-choice">Multiple Choice</option>
+                      <option value="true-false">True/False</option>
+                      <option value="fill-in-the-blank">Fill-in-the-blank</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Reward points</label>
+                    <input 
+                      type="number"
+                      className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                      value={newQ.points}
+                      onChange={e => setNewQ({...newQ, points: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Domain Subject</label>
+                    <input 
+                      type="text"
+                      className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                      placeholder="e.g. Physics"
+                      value={newQ.subject || ''}
+                      onChange={e => setNewQ({...newQ, subject: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Section Category</label>
+                    <input 
+                      type="text"
+                      className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                      placeholder="e.g. Mechanics"
+                      value={newQ.category}
+                      onChange={e => setNewQ({...newQ, category: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Grade Level</label>
+                    <select 
+                      className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                      value={newQ.grade}
+                      onChange={e => setNewQ({...newQ, grade: e.target.value as Grade})}
+                    >
+                      {Object.values(Grade).map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Stream</label>
+                    <select 
+                      className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                      value={newQ.stream}
+                      onChange={e => setNewQ({...newQ, stream: e.target.value as Stream})}
+                    >
+                      {Object.values(Stream).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Search Tags (Comma separated)</label>
+                  <input 
+                    type="text"
+                    className="w-full p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50"
+                    placeholder="gravity, dynamics, motion"
+                    value={newQ.tags?.join(', ') || ''}
+                    onChange={e => setNewQ({...newQ, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                {newQ.type === 'multiple-choice' || newQ.type === 'true-false' ? (
+                  <>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Response Options & Decoder Key</label>
+                    <div className="space-y-4">
+                      {newQ.options?.map((opt, idx) => (
+                        <div key={idx} className="flex gap-4 items-center">
+                          <button 
+                            onClick={() => setNewQ({...newQ, correctAnswer: idx})}
+                            className={`w-12 h-12 border-4 border-black rounded-xl shrink-0 font-black text-xl flex items-center justify-center transition-all ${newQ.correctAnswer === idx ? 'bg-indigo-600 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-gray-100 hover:bg-gray-200'}`}
+                          >
+                            {String.fromCharCode(65 + idx)}
+                          </button>
+                          <input 
+                            type="text" 
+                            className={`flex-1 p-4 border-4 border-black rounded-xl font-black outline-none focus:bg-gray-50 ${newQ.correctAnswer === idx ? 'bg-indigo-50 border-indigo-600' : ''}`}
+                            placeholder={`Option ${String.fromCharCode(65 + idx)}`}
+                            value={opt}
+                            disabled={newQ.type === 'true-false'}
+                            onChange={e => {
+                              const opts = [...(newQ.options || [])];
+                              opts[idx] = e.target.value;
+                              setNewQ({...newQ, options: opts});
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Registry Correction Key (FITB)</label>
+                    <input 
+                      type="text"
+                      className="w-full p-6 border-4 border-black rounded-2xl font-black text-2xl outline-none focus:bg-gray-50"
+                      placeholder="Enter the exact answer..."
+                      value={newQ.correctAnswer?.toString() || ''}
+                      onChange={e => setNewQ({...newQ, correctAnswer: e.target.value})}
+                    />
+                    <p className="text-[8px] font-black uppercase text-slate-400 text-right mt-2 italic">Standardized string input required</p>
+                  </div>
+                )}
+                
+                <div className="p-8 bg-indigo-50 border-4 border-indigo-600 border-dashed rounded-[3rem] space-y-4">
+                  <h4 className="text-xl font-black uppercase italic text-indigo-600">Sovereign Validation</h4>
+                  <ul className="text-[10px] font-bold text-indigo-900 space-y-1">
+                    <li className={newQ.text ? 'text-green-600' : 'text-rose-600'}>• {newQ.text ? 'Payload text detected' : 'Question text missing'}</li>
+                    <li className={newQ.correctAnswer !== undefined ? 'text-green-600' : 'text-rose-600'}>• {newQ.correctAnswer !== undefined ? 'Decoder key mapped' : 'No correct answer defined'}</li>
+                    <li className={newQ.subject ? 'text-green-600' : 'text-amber-600'}>• {newQ.subject ? `Subject: ${newQ.subject}` : 'General subject mapping used'}</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4 pt-8">
+              <button 
+                onClick={() => setIsAdding(false)}
+                className="flex-1 py-6 bg-gray-100 border-4 border-black rounded-2xl font-black uppercase text-xl hover:bg-gray-200 transition-colors"
+              >
+                Abort Deployment
+              </button>
+              <button 
+                onClick={() => {
+                  if (!newQ.text || newQ.correctAnswer === undefined) {
+                    alert('Deployment Blocked: Core intelligence fields incomplete.');
+                    return;
+                  }
+                  onAdd({ ...newQ, id: Date.now().toString() } as Question);
+                  setIsAdding(false);
+                  setNewQ({ text: '', type: 'multiple-choice', options: ['', '', '', ''], correctAnswer: 0, points: 10, category: 'General', tags: [], grade: Grade.G12, stream: Stream.NATURAL_SCIENCE });
+                }}
+                className="flex-1 py-6 bg-indigo-600 text-white border-4 border-black rounded-2xl font-black uppercase text-xl shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] hover:bg-indigo-700 active:translate-y-2 active:shadow-none transition-all"
+              >
+                Finalize Intel Commit →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ExamQuestionPicker: React.FC<{
+  bank: Question[],
+  onClose: () => void,
+  onSelect: (questions: Question[]) => void
+}> = ({ bank, onClose, onSelect }) => {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+
+  const filtered = bank.filter(q => q.text.toLowerCase().includes(search.toLowerCase()) || q.category.toLowerCase().includes(search.toLowerCase()));
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[7500] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white border-[12px] border-black rounded-[5rem] w-full max-w-4xl h-[85vh] flex flex-col shadow-[30px_30px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
+        <div className="p-10 border-b-8 border-black">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-4xl font-black uppercase italic leading-none">Intelligence Retrieval</h3>
+            <button onClick={onClose} className="w-12 h-12 bg-rose-50 border-4 border-black rounded-xl text-xl font-black">✕</button>
+          </div>
+          <input 
+            type="text" 
+            placeholder="Filter bank..."
+            className="w-full p-6 border-4 border-black rounded-2xl font-black text-xl italic"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto p-10 space-y-6 custom-scrollbar bg-slate-50">
+          {filtered.map(q => (
+            <div 
+              key={q.id}
+              onClick={() => toggleSelect(q.id)}
+              className={`p-6 border-4 border-black rounded-3xl cursor-pointer transition-all flex items-center gap-6 ${selected.includes(q.id) ? 'bg-indigo-600 text-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] -translate-y-1' : 'bg-white hover:bg-gray-50'}`}
+            >
+              <div className={`w-10 h-10 border-4 border-black rounded-xl flex items-center justify-center font-black ${selected.includes(q.id) ? 'bg-white text-indigo-600' : 'bg-gray-100'}`}>
+                {selected.includes(q.id) ? '✓' : ''}
+              </div>
+              <div className="flex-1">
+                <p className="font-black uppercase italic leading-tight text-lg">"{q.text}"</p>
+                <div className="flex gap-4 mt-2 text-[10px] font-black uppercase opacity-60">
+                  <span>{q.type}</span>
+                  <span>•</span>
+                  <span>{q.subject}</span>
+                </div>
+              </div>
+              <span className="font-black italic text-xl shrink-0">{q.points} PTS</span>
+            </div>
+          ))}
+        </div>
+        <div className="p-10 border-t-8 border-black bg-white flex justify-between items-center">
+          <span className="text-xl font-black uppercase italic">{selected.length} Fragments Selected</span>
+          <button 
+            disabled={selected.length === 0}
+            onClick={() => {
+              const selectedQs = bank.filter(q => selected.includes(q.id));
+              onSelect(selectedQs);
+            }}
+            className="px-12 py-6 bg-indigo-600 text-white border-4 border-black rounded-2xl font-black uppercase text-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] active:translate-y-1 disabled:opacity-30 disabled:translate-y-0"
+          >
+            Integrate Intel →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ 
   currentUser,
   exams, 
@@ -173,9 +678,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onUpdateSubmission,
   onNavClick
 }) => {
-  const [activeTab, setActiveTab] = useState<'exams' | 'courses' | 'assignments' | 'submissions' | 'videos' | 'database'>('exams');
+  const [activeTab, setActiveTab] = useState<'exams' | 'courses' | 'assignments' | 'submissions' | 'videos' | 'database' | 'questions'>('exams');
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Record<string, AssignmentSubmission[]>>({});
+  const [questionBank, setQuestionBank] = useState<Question[]>([]);
+  const [isQuestionBankOpen, setIsQuestionBankOpen] = useState(false);
+  const [isExamPickerOpen, setIsExamPickerOpen] = useState(false);
+  const [selectedBankQuestions, setSelectedBankQuestions] = useState<string[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingCourse, setIsCreatingCourse] = useState(false);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
@@ -200,9 +709,29 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         submissionsMap[assignment.id] = fetchedSubmissions;
       }
       setSubmissions(submissionsMap);
+
+      const fetchedQuestions = await dbService.fetchQuestionBank();
+      setQuestionBank(fetchedQuestions);
     };
     fetchData();
   }, []);
+
+  const handleUpdateQuestionInBank = async (q: Question) => {
+    await dbService.updateQuestionInBank(q);
+    setQuestionBank(prev => prev.map(item => item.id === q.id ? q : item));
+  };
+
+  const handleDeleteQuestionFromBank = async (id: string) => {
+    if (window.confirm("Purge this intel from the sovereign registry?")) {
+      await dbService.deleteQuestionFromBank(id);
+      setQuestionBank(prev => prev.filter(q => q.id !== id));
+    }
+  };
+
+  const handleAddQuestionToBank = async (q: Question) => {
+    await dbService.addQuestionToBank(q);
+    setQuestionBank(prev => [q, ...prev]);
+  };
 
   // Generation Params
   const [genSubject, setGenSubject] = useState('');
@@ -250,6 +779,7 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [isValidating, setIsValidating] = useState(false);
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
   const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [courseWizardStep, setCourseWizardStep] = useState(1);
 
   const validateStep1 = () => {
@@ -330,6 +860,8 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   const [lessonQuizPreview, setLessonQuizPreview] = useState<Partial<Question>[]>([]);
+  const [quizDifficulty, setQuizDifficulty] = useState<Difficulty>('Medium');
+  const [quizQuestionTypes, setQuizQuestionTypes] = useState<QuestionType[]>(['multiple-choice']);
 
   const handleGenerateLessonQuiz = async () => {
     if (!currentLesson.content.trim()) {
@@ -339,7 +871,11 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     setIsGeneratingQuiz(true);
     try {
-      const questions = await generateQuizFromLessonContent(currentLesson.content);
+      const questions = await generateQuizFromLessonContent(
+        currentLesson.content, 
+        quizDifficulty, 
+        quizQuestionTypes
+      );
       setLessonQuizPreview(questions);
     } catch (error) {
       console.error('Quiz Generation Error:', error);
@@ -640,6 +1176,19 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     } else {
       await onAddAssignment(updatedAssignment);
       setAssignments([...assignments, updatedAssignment]);
+      
+      // Notify students in relevant grade and stream
+      const course = courses.find(c => c.code === updatedAssignment.courseCode);
+      if (course) {
+        await dbService.notifyRelevantStudents({
+          title: 'Hojii Manee Haaraa',
+          message: `${course.title}: Hojii manee haaraa '${updatedAssignment.title}' dabalamee jira. Akka galmeessitan kabajaan isin beeksifna.`,
+          type: 'assignment',
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          link: `/assignments/${updatedAssignment.id}`
+        }, course.grade, course.stream);
+      }
     }
     setIsCreatingAssignment(false);
     setEditingAssignment(null);
@@ -694,6 +1243,12 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             className={`px-10 py-4 rounded-t-3xl border-x-4 border-t-4 border-black font-black uppercase text-sm transition-all ${activeTab === 'videos' ? 'bg-pink-600 text-white translate-y-2' : 'bg-gray-100'}`}
           >
             Video Gen
+          </button>
+          <button 
+            onClick={() => setActiveTab('questions')}
+            className={`px-10 py-4 rounded-t-3xl border-x-4 border-t-4 border-black font-black uppercase text-sm transition-all ${activeTab === 'questions' ? 'bg-indigo-600 text-white translate-y-2' : 'bg-gray-100'}`}
+          >
+            Bank.
           </button>
           <button 
             onClick={() => setActiveTab('database')}
@@ -936,6 +1491,20 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 ...submissions,
                                 [assignment.id]: currentSubmissions.map(s => s.id === updatedSub.id ? updatedSub : s)
                               });
+
+                              // Notify Student about the grade/result
+                              if (updatedSub.status === 'graded') {
+                                await dbService.createNotification({
+                                  userId: updatedSub.studentId,
+                                  title: 'Hojii Mannee Qullaraa',
+                                  message: `Hojii mannee '${assignment.title}' sirreeffamee jira. Qabxii: ${updatedSub.grade}/${assignment.points}. Galatoomaa!`,
+                                  type: 'grade',
+                                  isRead: false,
+                                  createdAt: new Date().toISOString(),
+                                  link: `/assignments/${assignment.id}`
+                                });
+                              }
+
                               setGradingSubId(null);
                             }} 
                             onCancel={() => setGradingSubId(null)} 
@@ -957,6 +1526,13 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="mt-8">
           <VideoGenerator />
         </div>
+      ) : activeTab === 'questions' ? (
+        <QuestionBankView 
+          questions={questionBank}
+          onAdd={handleAddQuestionToBank}
+          onUpdate={handleUpdateQuestionInBank}
+          onDelete={handleDeleteQuestionFromBank}
+        />
       ) : activeTab === 'database' ? (
         <div className="space-y-12 animate-fadeIn pb-20">
           <div className="flex justify-between items-center bg-white border-8 border-black p-8 rounded-[3rem] shadow-[15px_15px_0px_0px_rgba(0,0,0,1)]">
@@ -1188,6 +1764,41 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <div className="md:col-span-2 space-y-4">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Lesson Content (Markdown)</label>
                         <textarea className="w-full p-6 border-4 border-black rounded-2xl font-black h-40" value={currentLesson.content} onChange={e => setCurrentLesson({...currentLesson, content: e.target.value})} />
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Quiz Complexity</label>
+                            <select 
+                              className="w-full p-4 border-2 border-black rounded-xl font-bold bg-white text-xs outline-none"
+                              value={quizDifficulty}
+                              onChange={e => setQuizDifficulty(e.target.value as Difficulty)}
+                            >
+                              <option value="Easy">Easy</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Hard">Hard</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Question Architectures</label>
+                            <div className="flex flex-wrap gap-2 p-3 border-2 border-black rounded-xl bg-white min-h-[50px]">
+                              {['multiple-choice', 'true-false', 'fill-in-the-blank', 'short-answer'].map(type => (
+                                <label key={type} className="flex items-center gap-1 font-black uppercase text-[8px] cursor-pointer">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={quizQuestionTypes.includes(type as QuestionType)}
+                                    onChange={e => {
+                                      if (e.target.checked) setQuizQuestionTypes([...quizQuestionTypes, type as QuestionType]);
+                                      else if (quizQuestionTypes.length > 1) setQuizQuestionTypes(quizQuestionTypes.filter(t => t !== type));
+                                    }}
+                                    className="w-3 h-3 accent-black"
+                                  />
+                                  {type.replace(/-/g, ' ')}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="flex justify-end">
                           <button 
                             onClick={handleGenerateLessonQuiz}
@@ -1381,7 +1992,17 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="fixed inset-0 z-[6000] bg-white overflow-y-auto p-6 md:p-20 flex flex-col items-center">
           <div className="w-full max-w-6xl space-y-12 py-12">
             <div className="flex justify-between items-center border-b-[10px] border-black pb-10">
-              <h3 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">{editingExamId ? 'Update Forge.' : 'Exam Forge.'}</h3>
+              <div className="flex items-center gap-8">
+                <h3 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">{editingExamId ? 'Update Forge.' : 'Exam Forge.'}</h3>
+                {newExam.questions && newExam.questions.length > 0 && (
+                  <button 
+                    onClick={() => setIsPreviewing(true)}
+                    className="px-8 py-4 bg-amber-400 border-4 border-black rounded-2xl font-black uppercase text-sm shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all"
+                  >
+                    👁️ Preview Exam
+                  </button>
+                )}
+              </div>
               <button onClick={() => { setIsCreating(false); setEditingExamId(null); }} className="w-20 h-20 bg-rose-50 border-8 border-black rounded-[2.5rem] flex items-center justify-center text-4xl font-black">✕</button>
             </div>
 
@@ -1657,10 +2278,18 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {wizardStep === 2 && (
                   <div className="space-y-12 animate-fadeIn">
                     <div className="bg-white border-8 border-black rounded-[5rem] p-12 md:p-20 space-y-12 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)]">
-                      <div className="flex justify-between items-center border-b-4 border-black pb-8">
-                        <h4 className="text-5xl font-black uppercase italic">Step 2: Unit Forge</h4>
-                        <span className="text-2xl font-black text-blue-600">{newExam.questions?.length} Items Staged</span>
-                      </div>
+          <div className="flex justify-between items-center border-b-4 border-black pb-8">
+            <h4 className="text-5xl font-black uppercase italic">Step 2: Unit Forge</h4>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsExamPickerOpen(true)}
+                className="px-6 py-3 bg-indigo-600 text-white border-4 border-black rounded-xl font-black uppercase text-xs shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all"
+              >
+                📥 Retrieve from Bank
+              </button>
+              <span className="text-2xl font-black text-blue-600">{newExam.questions?.length} Items Staged</span>
+            </div>
+          </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <div className="md:col-span-3 space-y-2">
                           <textarea placeholder="The derivative of sin(x) is..." className={`w-full p-10 border-4 border-black rounded-[3rem] font-black h-32 text-2xl bg-gray-50 outline-none ${errors.qText ? 'border-rose-500' : ''}`} value={currentQuestion.text || ''} onChange={e => { setCurrentQuestion({...currentQuestion, text: e.target.value}); setErrors({...errors, qText: ''}); }} />
@@ -1826,6 +2455,36 @@ const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {isExamPickerOpen && (
+        <ExamQuestionPicker 
+          bank={questionBank}
+          onClose={() => setIsExamPickerOpen(false)}
+          onSelect={(qs) => {
+            const formattedQs = qs.map((q, idx) => ({ ...q, id: `bank-${Date.now()}-${idx}` }));
+            const updatedQuestions = [...(newExam.questions || []), ...formattedQs];
+            setNewExam(prev => ({
+              ...prev,
+              questions: updatedQuestions,
+              totalPoints: (prev.totalPoints || 0) + formattedQs.reduce((sum, item) => sum + item.points, 0)
+            }));
+            updateCategories(updatedQuestions);
+            setIsExamPickerOpen(false);
+          }}
+        />
+      )}
+
+      {isPreviewing && (
+        <PreviewExamModal 
+          exam={newExam}
+          currentUser={currentUser}
+          onClose={() => setIsPreviewing(false)}
+          onConfirm={() => {
+            setIsPreviewing(false);
+            handleSaveExam();
+          }}
+        />
       )}
     </div>
   );

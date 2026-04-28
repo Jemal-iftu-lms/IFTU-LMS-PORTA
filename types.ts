@@ -124,6 +124,16 @@ export interface Badge {
   title: string;
   icon: string;
   earnedAt: string;
+  description?: string;
+}
+
+export interface AcademicRecord {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+  uploadedAt: string;
+  size?: number;
 }
 
 export interface UserPermissions {
@@ -149,7 +159,8 @@ export interface User {
   joinedDate: string;
   nid?: string; // National Identity Number
   studentIdNumber: string; // Student ID Number
-  academicRecordsUrl?: string; // URL for uploaded academic records
+  academicRecordsUrl?: string; // Deprecated single URL
+  academicRecords?: AcademicRecord[]; // Collection of academic records
   gender?: 'Male' | 'Female' | 'Other';
   dob?: string;
   salary?: number; // Base Salary for Teachers or Stipend for Students
@@ -165,8 +176,17 @@ export interface User {
   completedLessons?: string[];
   completedExams?: string[];
   completedCourses?: string[];
+  enrolledCourses?: string[]; // Courses the student is currently active in
   certificatesPaid?: string[];
   permissions?: UserPermissions;
+}
+
+export interface Enrollment {
+  id: string;
+  userId: string;
+  courseId: string;
+  enrolledAt: string;
+  status: 'active' | 'completed' | 'dropped';
 }
 
 export interface ExamResult {

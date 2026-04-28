@@ -232,6 +232,72 @@ export const MOCK_EXAMS: Exam[] = [
     ]
   },
   {
+    id: 'exam-national-physics-9-11',
+    title: 'National Baseline Mastery: Grade 9-11 Physics',
+    courseCode: 'PHYS-G11-C',
+    grade: Grade.G11,
+    stream: Stream.NATURAL_SCIENCE,
+    academicYear: CURRENT_YEAR,
+    durationMinutes: 90,
+    totalPoints: 100,
+    status: 'published',
+    type: 'National',
+    semester: 1,
+    subject: 'Physics',
+    difficulty: 'Medium',
+    description: 'A comprehensive assessment covering foundational physics concepts from Grade 9 to 11, focusing on mechanics, heat, and electricity.',
+    questions: [
+      { id: 'p-q1', text: 'A car accelerates from rest at a constant rate of 4 m/s² for 5 seconds. What is its final velocity?', type: 'multiple-choice', options: ['10 m/s', '20 m/s', '25 m/s', '40 m/s'], correctAnswer: 1, points: 10, category: 'Mechanics' },
+      { id: 'p-q2', text: "Newton's Second Law of Motion states that force is equal to the product of mass and:", type: 'multiple-choice', options: ['Velocity', 'Displacement', 'Acceleration', 'Momentum'], correctAnswer: 2, points: 5, category: 'Mechanics' },
+      { id: 'p-q3', text: 'The energy an object possesses due to its motion is called:', type: 'multiple-choice', options: ['Potential Energy', 'Chemical Energy', 'Thermal Energy', 'Kinetic Energy'], correctAnswer: 3, points: 5, category: 'Energy' },
+      { id: 'p-q4', text: 'Which of the following is a vector quantity?', type: 'multiple-choice', options: ['Speed', 'Distance', 'Mass', 'Force'], correctAnswer: 3, points: 5, category: 'Mechanics' },
+      { id: 'p-q5', text: 'The transfer of heat through a vacuum is known as:', type: 'multiple-choice', options: ['Conduction', 'Convection', 'Radiation', 'Insulation'], correctAnswer: 2, points: 5, category: 'Thermodynamics' },
+      { id: 'p-q6', text: 'A resistor of 10 Ohms is connected to a 12V battery. What is the current flowing through it?', type: 'multiple-choice', options: ['1.2 A', '120 A', '0.83 A', '2 A'], correctAnswer: 0, points: 10, category: 'Electricity' },
+      { id: 'p-q7', text: 'The SI unit of power is the:', type: 'multiple-choice', options: ['Joule', 'Newton', 'Watt', 'Volt'], correctAnswer: 2, points: 5, category: 'Energy' },
+      { id: 'p-q8', text: "According to Pascal's Principle, pressure applied to an enclosed fluid is:", type: 'multiple-choice', options: ['Decreased with depth', 'Transmitted undiminished', 'Only vertical', 'Dependent on shape'], correctAnswer: 1, points: 10, category: 'Fluids' },
+      { id: 'p-q9', text: 'Which type of lens can form both real and virtual images?', type: 'multiple-choice', options: ['Concave lens', 'Convex lens', 'Planar lens', 'Bifocal lens'], correctAnswer: 1, points: 10, category: 'Optics' },
+      { id: 'p-q10', text: 'The pitch of a sound wave depends primarily on its:', type: 'multiple-choice', options: ['Amplitude', 'Velocity', 'Phase', 'Frequency'], correctAnswer: 3, points: 5, category: 'Waves' },
+      { id: 'p-q11', text: 'The rate of change of momentum of an object is proportional to the applied ____.', type: 'fill-in-the-blank', options: [], correctAnswer: 'force', points: 5, category: 'Mechanics' },
+      { id: 'p-q12', text: 'The device used to measure electric current is the ____.', type: 'fill-in-the-blank', options: [], correctAnswer: 'ammeter', points: 5, category: 'Electricity' },
+      { id: 'p-q13', text: 'The process of heat transfer through direct contact of particles is called ____.', type: 'fill-in-the-blank', options: [], correctAnswer: 'conduction', points: 10, category: 'Thermodynamics' },
+      { id: 'p-q14', text: 'In a series circuit, the ____ remains the same through all components.', type: 'fill-in-the-blank', options: [], correctAnswer: 'current', points: 10, category: 'Electricity' },
+      { id: 'p-q15', text: 'The work done per unit charge is defined as electric ____.', type: 'fill-in-the-blank', options: [], correctAnswer: 'potential', points: 5, category: 'Electricity' }
+    ]
+  },
+  {
+    id: 'exam-national-chemistry-9-12',
+    title: 'National Baseline Mastery: Grade 9-12 Chemistry',
+    courseCode: 'CHEMS-9,10,11,12',
+    grade: Grade.G12,
+    stream: Stream.NATURAL_SCIENCE,
+    academicYear: CURRENT_YEAR,
+    durationMinutes: 120,
+    totalPoints: 100,
+    status: 'published',
+    type: 'National',
+    semester: 2,
+    subject: 'Chemistry',
+    difficulty: 'Medium',
+    description: 'An essential benchmark exam covering atomic structure, stoichiometry, and organic chemistry for high school graduation readiness.',
+    questions: [
+      { id: 'c-q1', text: 'An element has 11 protons and 12 neutrons. What is its mass number?', type: 'multiple-choice', options: ['11', '12', '23', '1'], correctAnswer: 2, points: 5, category: 'Atomic Structure' },
+      { id: 'c-q2', text: 'Which of the following elements has the highest electronegativity?', type: 'multiple-choice', options: ['Sodium', 'Chlorine', 'Fluorine', 'Oxygen'], correctAnswer: 2, points: 5, category: 'Periodic Table' },
+      { id: 'c-q3', text: 'What type of bond is formed when electrons are shared between two atoms?', type: 'multiple-choice', options: ['Ionic Bond', 'Covalent Bond', 'Metallic Bond', 'Hydrogen Bond'], correctAnswer: 1, points: 5, category: 'Chemical Bonding' },
+      { id: 'c-q4', text: 'How many moles are in 36 grams of Water (H₂O)? (Atomic weights: H=1, O=16)', type: 'multiple-choice', options: ['1 mole', '2 moles', '1.5 moles', '3 moles'], correctAnswer: 1, points: 10, category: 'Stoichiometry' },
+      { id: 'c-q5', text: 'A solution with a pH of 3 is considered:', type: 'multiple-choice', options: ['Neutral', 'Weakly Basic', 'Strongly Acidic', 'Weakly Acidic'], correctAnswer: 2, points: 5, category: 'Acids and Bases' },
+      { id: 'c-q6', text: 'In a redox reaction, oxidation is defined as the ____ of electrons.', type: 'multiple-choice', options: ['Loss', 'Gain', 'Sharing', 'Neutron loss'], correctAnswer: 0, points: 10, category: 'Redox' },
+      { id: 'c-q7', text: 'Which functional group is characteristic of carboxylic acids?', type: 'multiple-choice', options: ['-OH', '-CHO', '-COOH', '-CO-'], correctAnswer: 2, points: 10, category: 'Organic Chemistry' },
+      { id: 'c-q8', text: 'Which of the following increases the rate of a chemical reaction?', type: 'multiple-choice', options: ['Lowering temperature', 'Decreasing pressure', 'Adding a catalyst', 'Increasing particle size'], correctAnswer: 2, points: 5, category: 'Kinetics' },
+      { id: 'c-q9', text: 'The simplest member of the Alkyne family is:', type: 'multiple-choice', options: ['Methane', 'Ethane', 'Ethene', 'Ethyne'], correctAnswer: 3, points: 10, category: 'Organic Chemistry' },
+      { id: 'c-q10', text: "According to Le Chatelier's Principle, adding more reactant to a system at equilibrium will shift it to the:", type: 'multiple-choice', options: ['Left', 'Right', 'No shift', 'Center'], correctAnswer: 1, points: 10, category: 'Equilibrium' },
+      { id: 'c-q11', text: 'The subatomic particle that determines the identity of an element is the ____.', type: 'fill-in-the-blank', options: [], correctAnswer: 'proton', points: 5, category: 'Atomic Structure' },
+      { id: 'c-q12', text: 'The chemical symbol for the element Potassium is ____.', type: 'fill-in-the-blank', options: [], correctAnswer: 'K', points: 5, category: 'Periodic Table' },
+      { id: 'c-q13', text: 'Methane (CH4) is a member of the ____ family of hydrocarbons.', type: 'fill-in-the-blank', options: [], correctAnswer: 'alkane', points: 10, category: 'Organic Chemistry' },
+      { id: 'c-q14', text: 'A substance that donates a pair of electrons is called a ____ base.', type: 'fill-in-the-blank', options: [], correctAnswer: 'Lewis', points: 10, category: 'Acids and Bases' },
+      { id: 'c-q15', text: "Avogadro's number is approximately 6.022 x 10^____.", type: 'fill-in-the-blank', options: [], correctAnswer: '23', points: 5, category: 'Stoichiometry' }
+    ]
+  },
+  {
     id: 'exam-mock-tvet-l1',
     title: 'TVET Level 1 Technical Mock',
     courseCode: 'TVET-L1-MOCK',
@@ -310,6 +376,49 @@ export const SUMMER_STATS = [
 export const SUMMER_ACTIVITIES = [
   { title: 'STEM Innovation Fair', date: 'August 15', desc: 'National exhibition of student projects.', image: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=600', tag: 'Innovation' },
   { title: 'Digital Bootcamps', date: 'July - Aug', desc: 'Coding and engineering for TVET.', image: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=600', tag: 'Skills' }
+];
+
+export const MOCK_EXAM_RESULTS: any[] = [
+  {
+    id: 'res-1',
+    studentId: 'std-demo',
+    examId: 'exam-mock-g11-natural',
+    score: 85,
+    totalPoints: 110,
+    answers: {},
+    completedAt: '2025-01-10T10:00:00Z',
+    timeSpentSeconds: 3600
+  },
+  {
+    id: 'res-2',
+    studentId: 'std-demo',
+    examId: 'exam-mock-g11-natural',
+    score: 95,
+    totalPoints: 110,
+    answers: {},
+    completedAt: '2025-02-15T14:00:00Z',
+    timeSpentSeconds: 3400
+  },
+  {
+    id: 'res-3',
+    studentId: 'std-demo',
+    examId: 'exam-mock-g12-natural',
+    score: 105,
+    totalPoints: 110,
+    answers: {},
+    completedAt: '2025-03-25T09:30:00Z',
+    timeSpentSeconds: 3200
+  },
+  {
+    id: 'res-4',
+    studentId: 'std-demo',
+    examId: 'exam-mock-g12-natural',
+    score: 110,
+    totalPoints: 110,
+    answers: {},
+    completedAt: '2026-04-20T11:00:00Z',
+    timeSpentSeconds: 3100
+  }
 ];
 
 export const ACADEMIC_SUBJECTS: Record<string, string[]> = {

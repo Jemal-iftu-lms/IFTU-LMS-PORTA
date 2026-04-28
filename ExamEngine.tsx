@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -194,7 +194,7 @@ const ExamEngine: React.FC<ExamEngineProps> = ({ exam, onComplete, onCancel }) =
       let userAnswerStr = '';
       let correctAnswerStr = '';
 
-      if (q.type === 'fill-in-the-blank') {
+      if (q.type === 'fill-in-the-blank' || q.type === 'short-answer') {
         userAnswerStr = String(answers[q.id] || '').trim();
         correctAnswerStr = String(q.correctAnswer).trim();
         isCorrect = userAnswerStr.toLowerCase() === correctAnswerStr.toLowerCase();
@@ -232,7 +232,7 @@ const ExamEngine: React.FC<ExamEngineProps> = ({ exam, onComplete, onCancel }) =
 
     exam.questions.forEach(q => {
       let isCorrect = false;
-      if (q.type === 'fill-in-the-blank') {
+      if (q.type === 'fill-in-the-blank' || q.type === 'short-answer') {
         isCorrect = String(finalAnswers[q.id] || '').trim().toLowerCase() === String(q.correctAnswer).trim().toLowerCase();
       } else {
         isCorrect = finalAnswers[q.id] === q.correctAnswer;
@@ -464,7 +464,7 @@ const ExamEngine: React.FC<ExamEngineProps> = ({ exam, onComplete, onCancel }) =
       <div className="flex-1 flex overflow-hidden relative">
         {/* PROCTOR FEED - FLOATING */}
         <div className="absolute bottom-10 right-10 w-48 h-64 bg-black border-4 border-black rounded-[3rem] overflow-hidden shadow-[20px_20px_0px_0px_rgba(0,0,0,0.5)] z-50 group hover:scale-110 transition-transform">
-           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover grayscale opacity-60" />
+           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover shadow-inner" />
            <div className="absolute top-0 left-0 w-full h-[2px] bg-red-500 shadow-[0_0_10px_rgba(239,68,68,1)] animate-scan z-10" />
            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)] pointer-events-none" />
            <div className="absolute top-4 left-4 flex items-center gap-3 z-20">
@@ -527,13 +527,12 @@ const ExamEngine: React.FC<ExamEngineProps> = ({ exam, onComplete, onCancel }) =
                             {currentQuestion.text}
                           </p>
                           <div className="grid grid-cols-1 gap-8">
-                            {currentQuestion.type === 'fill-in-the-blank' ? (
+                            {currentQuestion.type === 'fill-in-the-blank' || currentQuestion.type === 'short-answer' ? (
                               <div className="space-y-4">
                                 <label className="text-xs font-black uppercase tracking-widest text-gray-400 italic">User Response Input</label>
-                                <input 
-                                  type="text"
+                                <textarea 
                                   placeholder="Type your answer here..."
-                                  className="w-full p-10 bg-white border-8 border-black rounded-[3rem] font-black text-3xl outline-none shadow-inner focus:ring-8 focus:ring-blue-600/20 transition-all uppercase tracking-tighter"
+                                  className="w-full p-10 bg-white border-8 border-black rounded-[3rem] font-black text-3xl outline-none shadow-inner focus:ring-8 focus:ring-blue-600/20 transition-all uppercase tracking-tighter h-48"
                                   value={answers[currentQuestion.id] || ''}
                                   onChange={(e) => handleAnswer(e.target.value)}
                                 />
@@ -622,11 +621,10 @@ const ExamEngine: React.FC<ExamEngineProps> = ({ exam, onComplete, onCancel }) =
                               {q.text}
                             </p>
                             <div className="grid grid-cols-1 gap-6">
-                              {q.type === 'fill-in-the-blank' ? (
-                                <input 
-                                  type="text"
+                              {q.type === 'fill-in-the-blank' || q.type === 'short-answer' ? (
+                                <textarea 
                                   placeholder="Type your answer here..."
-                                  className="w-full p-8 bg-white border-8 border-black rounded-[2.5rem] font-black text-2xl outline-none shadow-inner focus:ring-8 focus:ring-blue-600/20 transition-all uppercase"
+                                  className="w-full p-8 bg-white border-8 border-black rounded-[2.5rem] font-black text-2xl outline-none shadow-inner focus:ring-8 focus:ring-blue-600/20 transition-all uppercase h-32"
                                   value={answers[q.id] || ''}
                                   onChange={(e) => handleAnswerById(q.id, e.target.value)}
                                 />

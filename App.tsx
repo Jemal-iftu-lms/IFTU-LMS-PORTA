@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import StudentProfile from './components/StudentProfile';
 import Header from './components/Header';
 import CourseCard from './components/CourseCard';
@@ -14,15 +14,16 @@ import PerformancePortal from './components/PerformancePortal';
 import AboutPortal from './components/AboutPortal';
 import CampusLocator from './components/CampusLocator';
 import DevPortal from './components/DevPortal';
-import ProjectReportPortal from './components/ProjectReportPortal';
 import FeedbackWidget from './components/FeedbackWidget';
 import LiveInterviewer from './components/LiveInterviewer';
-import { MOCK_COURSES, MOCK_NEWS, MOCK_EXAMS, SUMMER_STATS, SUMMER_ACTIVITIES } from './constants';
+import { MOCK_COURSES, MOCK_NEWS, MOCK_EXAMS, SUMMER_STATS, SUMMER_ACTIVITIES, MOCK_EXAM_RESULTS } from './constants';
 import { Course, Grade, User, Exam, ExamResult, EducationLevel, Stream, Language, News, Assignment, AssignmentSubmission } from './types';
 import { fetchLatestEducationNews, generateExamsForGrades } from './services/geminiService';
 import { auth, reconnectDb } from './firebase';
 import { AssignmentPortal } from './components/AssignmentPortal';
 import { StudyHall } from './components/StudyHall';
+import CommunityForum from './components/CommunityForum';
+import StudyPlanner from './components/StudyPlanner';
 import { dbService } from './services/dbService';
 
 const TRANSLATIONS: Record<Language, Record<string, string>> = {
@@ -34,14 +35,15 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     about: 'About', 
     locator: 'Locator', 
     guide: 'Guide', 
-    projectreport: 'Project Report',
     exams: 'Exams', 
     assignments: 'Assignments', 
     studyhall: 'Study Hall', 
     tutor: 'AI Tutor', 
     login: 'Login', 
     leaderboard: 'Rankings', 
-    performance: 'My Results'
+    performance: 'My Results',
+    forum: 'Community',
+    planner: 'AI Planner'
   },
   am: { 
     home: 'መነሻ', 
@@ -51,14 +53,15 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     about: 'ስለ እኛ', 
     locator: 'መፈለጊያ', 
     guide: 'መመሪያ', 
-    projectreport: 'የፕሮጀክት ሪፖርት',
     exams: 'ፈተናዎች', 
     assignments: 'ተግባራት', 
     studyhall: 'የጥናት አዳራሽ', 
     tutor: 'AI ረዳት', 
     login: 'ይግቡ', 
     leaderboard: 'ደረጃዎች', 
-    performance: 'ውጤቴ'
+    performance: 'ውጤቴ',
+    forum: 'ማህበረሰብ',
+    planner: 'የጥናት ዕቅድ'
   },
   om: { 
     home: 'Mana', 
@@ -68,14 +71,15 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     about: "Waa'ee", 
     locator: 'Bakka', 
     guide: 'Qajeelfama', 
-    projectreport: 'Gabaasa Piroojektii',
     exams: 'Qormaata', 
     assignments: 'Hojiiwwan', 
     studyhall: 'Mana Qo’annoo', 
     tutor: 'Gargaaraa AI', 
     login: 'Seeni', 
     leaderboard: 'Sadarkaa', 
-    performance: 'Bu’aa koo'
+    performance: 'Bu’aa koo',
+    forum: 'Hawaasa',
+    planner: 'Karoorsaa AI'
   }
 };
 
@@ -130,7 +134,29 @@ const INITIAL_USERS: User[] = [
     email: 'student@iftu.edu.et', 
     joinedDate: '2024-06-10', 
     preferredLanguage: 'en', 
-    badges: [{ id: 'b-s1', title: 'Early Achiever', icon: '⭐', earnedAt: '2024-06-15' }],
+    badges: [
+      { id: 'b-s1', title: 'Early Achiever', icon: '⭐', earnedAt: '2024-06-15', description: 'One of the first 100 students to join the National Sovereign Education Center.' },
+      { id: 'b-s2', title: 'Code Warrior', icon: '💻', earnedAt: '2024-08-20', description: 'Mastered the fundamentals of algorithmic thinking.' },
+      { id: 'b-s3', title: 'Top Scorer', icon: '🎯', earnedAt: '2025-01-10', description: 'Achieved 100% in a National Mock Exam.' }
+    ],
+    academicRecords: [
+      {
+        id: 'rec-001',
+        name: 'Grade 11 Report Card.pdf',
+        url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+        type: 'application/pdf',
+        uploadedAt: '2025-01-15T10:00:00Z',
+        size: 1024 * 450
+      },
+      {
+        id: 'rec-002',
+        name: 'STEM Certification.jpg',
+        url: 'https://images.unsplash.com/photo-1546410531-bb4caa6b424d?q=80&w=1000&auto=format&fit=crop',
+        type: 'image/jpeg',
+        uploadedAt: '2025-02-20T14:30:00Z',
+        size: 1024 * 1200
+      }
+    ],
     school: 'Demo Academy', 
     photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=DemoStu&backgroundColor=00D05A',
     completedLessons: ['p11-l1'], 
@@ -211,6 +237,7 @@ const App: React.FC = () => {
   const [viewingCourse, setViewingCourse] = useState<Course | null>(null);
   const [groundedNews, setGroundedNews] = useState<{ text: string, sources: any[] } | null>(null);
   const [isSyncingNews, setIsSyncingNews] = useState(false);
+  const [aiTutorContext, setAiTutorContext] = useState<{ content?: string; title?: string; prompt?: string }>({});
   const [isGeneratingExams, setIsGeneratingExams] = useState(false);
   const [examGenProgress, setExamGenProgress] = useState('');
   const [allExamResults, setAllExamResults] = useState<ExamResult[]>([]);
@@ -224,6 +251,7 @@ const App: React.FC = () => {
   const [subjectFilter, setSubjectFilter] = useState<string>('all');
   const [dbError, setDbError] = useState<string | null>(null);
   const [isInIframe, setIsInIframe] = useState(false);
+  const [showProfilePrompt, setShowProfilePrompt] = useState(false);
 
   useEffect(() => {
     // Detect if we are in an iframe (common in AI Studio preview)
@@ -435,7 +463,7 @@ const App: React.FC = () => {
               joinedDate: new Date().toISOString().split('T')[0],
               preferredLanguage: 'en',
               badges: [],
-              photo: authUser.photoURL || (isDefaultAdmin ? 'https://images.unsplash.com/photo-1531384441138-2736e62e0919?q=80&w=1000&auto=format&fit=crop' : `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.uid}&backgroundColor=b6e3f4`),
+              photo: (isDefaultAdmin && authUser.photoURL) ? authUser.photoURL : (authUser.photoURL || (isDefaultAdmin ? 'https://images.unsplash.com/photo-1531384441138-2736e62e0919?q=80&w=1000&auto=format&fit=crop' : `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.uid}&backgroundColor=b6e3f4`)),
               completedExams: [],
               completedCourses: [],
               certificatesPaid: [],
@@ -452,6 +480,11 @@ const App: React.FC = () => {
 
           setCurrentUser(profile as User);
           setIsLoggedIn(true);
+          
+          // Check for incomplete profile
+          if (profile.role === 'student' && (profile.gender === 'Other' || profile.dob === '2000-01-01')) {
+            setShowProfilePrompt(true);
+          }
           
           if (activeView === 'login') {
             handleNavClick(profile.role === 'admin' ? 'admin' : profile.role === 'teacher' || profile.role === 'teaching_assistant' ? 'teacher' : 'home');
@@ -519,7 +552,7 @@ const App: React.FC = () => {
             joinedDate: new Date().toISOString().split('T')[0],
             preferredLanguage: 'en',
             badges: [],
-            photo: authUser.photo || (isDefaultAdmin ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jemal&backgroundColor=b6e3f4' : `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.id}&backgroundColor=b6e3f4`),
+            photo: (isDefaultAdmin && authUser.photo) ? authUser.photo : (authUser.photo || (isDefaultAdmin ? 'https://images.unsplash.com/photo-1531384441138-2736e62e0919?q=80&w=1000&auto=format&fit=crop' : `https://api.dicebear.com/7.x/avataaars/svg?seed=${authUser.id}&backgroundColor=b6e3f4`)),
             completedExams: [],
             completedCourses: [],
             certificatesPaid: [],
@@ -532,6 +565,12 @@ const App: React.FC = () => {
 
         setIsLoggedIn(true);
         setCurrentUser(profile as User);
+
+        // Check for incomplete profile
+        if (profile.role === 'student' && (profile.gender === 'Other' || profile.dob === '2000-01-01')) {
+          setShowProfilePrompt(true);
+        }
+
         handleNavClick(profile.role === 'admin' ? 'admin' : profile.role === 'teacher' || profile.role === 'teaching_assistant' ? 'teacher' : 'home');
         
         const results = await dbService.fetchResults(profile.id);
@@ -544,17 +583,17 @@ const App: React.FC = () => {
         let message = errorMessage || "Google Sign-In failed.";
         
         if (errorCode === 'auth/network-request-failed' || errorMessage.includes('network-request-failed')) {
-          message = "CRITICAL: Connection Blocked! 🛡️ This environment is strictly protected. \n\nACTION REQUIRED: Please click the 'OPEN IN NEW TAB (STABLE)' button at the top right to log in securely.";
+          message = "CRITICAL: NETWORK BLOCKED! 🛡️ This sandbox environment is highly restricted and blocked the Google login handshake. \n\nACTION: Please click 'USE DEMO STUDENT' below to enter the portal immediately without a Google account.";
         } else if (errorMessage.includes('projectconfigservice.getprojectconfig-are-blocked')) {
-          message = "System error: Identity Toolkit API is blocked. Please check your Firebase configuration.";
+          message = "SYSTEM CONFIG ERROR: Identity Toolkit is blocked by Google Cloud for this projectID. Please use Demo access for now.";
         } else if (errorCode === 'auth/unauthorized-domain' || errorMessage.includes('unauthorized-domain')) {
-          message = "Unauthorized Domain. Please add this host (ais-dev-...) to your Firebase Authorized Domains.";
+          message = "UNAUTHORIZED DOMAIN: This domain is not in your Firebase whitelist. Please add it in the Firebase Console.";
         } else if (errorCode === 'auth/popup-closed-by-user' || errorMessage.includes('popup-closed-by-user')) {
-          message = "Sign-in window closed too early. ⚠️ Please click 'SIGN IN WITH GOOGLE' again and wait for it to finish. If it keeps closing, use the 'OPEN IN NEW TAB' button.";
+          message = "WINDOW CLOSED: Authentication was interrupted. Please click 'SIGN IN WITH GOOGLE' again and don't close the window.";
         } else if (errorCode === 'auth/popup-blocked' || errorMessage.includes('popup-blocked')) {
-          message = "Popup BLOCKED by browser! 🚫 Please allow popups for this site or use the 'OPEN IN NEW TAB' button.";
+          message = "POPUP BLOCKED: Your browser blocked the secure login window. Please allow popups or use the demo login.";
         } else if (errorCode === 'auth/internal-error' || errorMessage.includes('internal-error')) {
-          message = "Internal Sync Error. Attempting auto-reconnect. Please try again in 5 seconds.";
+          message = "INTERNAL ERROR: Database sync failed. Attempting auto-reconnect. Please try again in 5 seconds.";
           import('./firebase').then(m => m.reconnectDb());
         }
         
@@ -595,6 +634,9 @@ const App: React.FC = () => {
           setIsDemoSession(true);
           setIsLoggedIn(true);
           setCurrentUser(localUser);
+          if (localUser.id === 'std-demo' || localUser.email === 'student@iftu.edu.et') {
+            setUserResults(MOCK_EXAM_RESULTS);
+          }
           handleNavClick(localUser.role === 'admin' ? 'admin' : localUser.role === 'teacher' || localUser.role === 'teaching_assistant' ? 'teacher' : 'home');
           setIsAuthenticating(false);
           return;
@@ -653,7 +695,7 @@ const App: React.FC = () => {
 
   const handleNavClick = (view: string) => {
     // RBAC: Verify if the user has permission to access the requested view
-    const publicViews = ['home', 'courses', 'news', 'mediahub', 'about', 'locator', 'guide', 'projectreport', 'login', 'search'];
+    const publicViews = ['home', 'courses', 'news', 'mediahub', 'about', 'locator', 'guide', 'login', 'search'];
     const studentViews = [...publicViews, 'exams', 'assignments', 'studyhall', 'tutor', 'performance', 'leaderboard', 'profile'];
     const teacherViews = [...publicViews, 'teacher'];
     const adminViews = [...publicViews, 'admin', 'teacher', 'dev'];
@@ -727,29 +769,48 @@ const App: React.FC = () => {
           <div className="space-y-8 max-w-md mx-auto">
             {authError && (
               <div className="p-8 bg-red-50 border-8 border-red-600 text-red-600 rounded-[2rem] font-black text-sm text-left shadow-[8px_8px_0px_0px_rgba(220,38,38,0.2)]">
-                <p className="flex items-center gap-2 mb-4">⚠️ <span className="uppercase">{authError}</span></p>
+                <p className="flex items-center gap-2 mb-4 font-black">⚠️ <span className="uppercase">{authError}</span></p>
                 <div className="flex flex-wrap gap-3">
-                  <button 
-                    onClick={() => {
-                        setAuthError("Synchronizing registry... Please wait.");
-                        import('./firebase').then(m => m.reconnectDb()).then(() => {
-                           setAuthError(null);
-                           handleLogin();
-                        });
-                    }}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg text-[10px] uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:translate-y-0.5 transition-all"
-                  >
-                    Force Reconnect & Retry
-                  </button>
-                  <button 
-                    onClick={() => {
-                       const win = window.open(window.location.href, '_blank');
-                       if (win) win.focus();
-                    }}
-                    className="px-4 py-2 bg-black text-white rounded-lg text-[10px] uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:translate-y-0.5 transition-all"
-                  >
-                    🚀 Open in New Tab (Most Stable)
-                  </button>
+                  {authError.includes('NETWORK BLOCKED') ? (
+                    <>
+                      <button 
+                        onClick={() => handleLogin(undefined, 'student@iftu.edu.et', 'demo')}
+                        className="px-6 py-3 bg-green-600 text-white rounded-xl text-xs font-black uppercase shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all"
+                      >
+                        ⚡ Use Demo Student
+                      </button>
+                      <button 
+                        onClick={() => handleLogin(undefined, 'admin@iftu.edu.et', 'demo')}
+                        className="px-6 py-3 bg-purple-600 text-white rounded-xl text-xs font-black uppercase shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all"
+                      >
+                        👑 Use Demo Admin
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        onClick={() => {
+                            setAuthError("Synchronizing registry... Please wait.");
+                            import('./firebase').then(m => m.reconnectDb()).then(() => {
+                               setAuthError(null);
+                               handleGoogleLogin();
+                            });
+                        }}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg text-[10px] uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:translate-y-0.5 transition-all"
+                      >
+                        Force Reconnect & Retry
+                      </button>
+                      <button 
+                        onClick={() => {
+                           const win = window.open(window.location.href, '_blank');
+                           if (win) win.focus();
+                        }}
+                        className="px-4 py-2 bg-black text-white rounded-lg text-[10px] uppercase shadow-[4px_4px_0px_0px_rgba(0,0,0,0.2)] hover:translate-y-0.5 transition-all"
+                      >
+                        🚀 Open in New Tab (Most Stable)
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -969,6 +1030,7 @@ const App: React.FC = () => {
               setSimulatedMessages(prev => [{ id: Date.now().toString(), text: msg, date: new Date().toLocaleTimeString() }, ...prev]);
             }}
             onNavClick={handleNavClick}
+            currentUser={currentUser || undefined}
           />
         );
       }
@@ -1374,21 +1436,37 @@ const App: React.FC = () => {
       case 'leaderboard':
         return <Leaderboard students={users} />;
       case 'profile':
-        return currentUser ? <StudentProfile user={currentUser} onUpdateUser={(updatedUser) => { setCurrentUser(updatedUser); setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u)); }} /> : null;
+        return currentUser ? (
+          <StudentProfile 
+            user={currentUser} 
+            onUpdateUser={(updatedUser) => { 
+              setCurrentUser(updatedUser); 
+              setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u)); 
+            }}
+            allCourses={courses}
+            examResults={userResults}
+          />
+        ) : null;
       case 'tutor':
-        return <AITutor />;
+        return <AITutor 
+          contextContent={aiTutorContext.content} 
+          contextTitle={aiTutorContext.title} 
+          initialPrompt={aiTutorContext.prompt} 
+        />;
       case 'assignments':
-        return currentUser ? <AssignmentPortal currentUser={currentUser} assignments={assignments} submissions={submissions} /> : null;
+        return currentUser ? <AssignmentPortal currentUser={currentUser} assignments={assignments} submissions={submissions} courses={courses} /> : null;
       case 'studyhall':
         return currentUser ? <StudyHall currentUser={currentUser} lang={currentLang} /> : null;
+      case 'forum':
+        return currentUser ? <CommunityForum currentUser={currentUser} /> : null;
+      case 'planner':
+        return currentUser ? <StudyPlanner currentUser={currentUser} /> : null;
       case 'locator':
         return <CampusLocator />;
       case 'about':
         return <AboutPortal currentUser={currentUser} />;
       case 'documentation':
         return <DevPortal />;
-      case 'projectreport':
-        return <ProjectReportPortal />;
       case 'guide':
         return (
           <div className="max-w-4xl mx-auto py-12 space-y-16 animate-fadeIn">
@@ -1768,6 +1846,11 @@ const App: React.FC = () => {
             setCurrentUser(updatedUser);
             setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
           }}
+          onOpenTutor={(content, title, prompt) => {
+            setAiTutorContext({ content, title, prompt });
+            setActiveView('tutor');
+            setViewingCourse(null);
+          }}
         />
       )}
       {!activeExam && !viewingCourse && (
@@ -1819,6 +1902,93 @@ const App: React.FC = () => {
           )}
           <main className="flex-grow w-full max-w-screen-2xl mx-auto px-4 py-16">{renderContent()}</main>
           <FeedbackWidget />
+          {showProfilePrompt && currentUser && (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[999] flex items-center justify-center p-6 sm:p-12 overflow-y-auto overflow-x-hidden">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white border-[10px] border-black rounded-[5rem] p-12 md:p-20 max-w-4xl w-full space-y-12 relative shadow-[30px_30px_0px_0px_rgba(59,130,246,1)]"
+              >
+                <div className="space-y-6 text-center">
+                  <div className="w-32 h-32 bg-yellow-400 border-8 border-black rounded-[2.5rem] flex items-center justify-center text-6xl mx-auto shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] animate-bounce-slow">
+                    🛡️
+                  </div>
+                  <h2 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter leading-tight">Identity Registry <br/><span className="text-blue-600">Verification Required</span></h2>
+                  <p className="text-xl font-bold text-gray-500 uppercase italic">Your sovereign profile is missing critical metadata.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="p-8 bg-blue-50 border-4 border-black rounded-[3rem] space-y-4">
+                    <h4 className="text-xl font-black uppercase italic">Sovereign Gender</h4>
+                    <select 
+                      className="w-full p-4 border-4 border-black rounded-2xl font-black text-sm"
+                      value={currentUser.gender || ''}
+                      onChange={(e) => {
+                        const gender = e.target.value as any;
+                        const updated = {...currentUser, gender};
+                        setCurrentUser(updated);
+                        dbService.syncUser(updated);
+                      }}
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className="p-8 bg-purple-50 border-4 border-black rounded-[3rem] space-y-4">
+                    <h4 className="text-xl font-black uppercase italic">Birth Protocol (DOB)</h4>
+                    <input 
+                      type="date"
+                      className="w-full p-4 border-4 border-black rounded-2xl font-black text-sm"
+                      value={currentUser.dob || ''}
+                      onChange={(e) => {
+                        const dob = e.target.value;
+                        const updated = {...currentUser, dob};
+                        setCurrentUser(updated);
+                        dbService.syncUser(updated);
+                      }}
+                    />
+                  </div>
+                  <div className="col-span-full p-8 bg-green-50 border-4 border-black rounded-[3rem] space-y-4">
+                    <h4 className="text-xl font-black uppercase italic">Student ID Assignment</h4>
+                    <input 
+                      type="text"
+                      placeholder="Enter Student ID (e.g. SID-2024-XXXX)"
+                      className="w-full p-4 border-4 border-black rounded-2xl font-black text-sm"
+                      value={currentUser.studentIdNumber || ''}
+                      onChange={(e) => {
+                        const sid = e.target.value;
+                        const updated = {...currentUser, studentIdNumber: sid};
+                        setCurrentUser(updated);
+                        dbService.syncUser(updated);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-gray-100 p-8 rounded-[3rem] border-4 border-black border-dashed">
+                   <p className="text-sm font-bold text-gray-500 uppercase tracking-widest text-center italic">
+                     By verifying these credentials, you synchronize your academic footprint with the IFTU LMS Sovereign Gateway.
+                   </p>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    if (currentUser.gender !== 'Other' && currentUser.dob !== '2000-01-01' && currentUser.studentIdNumber) {
+                      setShowProfilePrompt(false);
+                    } else {
+                      // Allow closing but maybe warn? Or just close as user requested
+                      setShowProfilePrompt(false);
+                    }
+                  }}
+                  className="w-full py-8 bg-black text-white border-8 border-black rounded-[3rem] font-black uppercase italic text-3xl shadow-[15px_15px_0px_0px_rgba(34,197,94,1)] hover:translate-y-2 hover:shadow-none transition-all"
+                >
+                  Continue to Portal →
+                </button>
+              </motion.div>
+            </div>
+          )}
           <footer className="bg-white text-black py-24 px-8 mt-20 text-center relative overflow-hidden border-t-8 border-black">
              <div className="flex flex-col items-center gap-12">
                <p className="text-[12px] md:text-[16px] font-black uppercase tracking-[0.4em] text-black/60 flex items-center justify-center flex-wrap gap-x-2">

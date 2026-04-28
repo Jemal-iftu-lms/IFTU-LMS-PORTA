@@ -9,15 +9,17 @@ import {
   Zap, Award, Target, Activity, Terminal, ArrowRight,
   Play, Plus, Search, FilePlus, ExternalLink
 } from 'lucide-react';
-import { User, Grade, EducationLevel, Course, UserPermissions, Stream, Exam, News, Lesson, Language, ExamResult, Question, Assignment, AssignmentSubmission, AppNotification, ExamType, CourseMaterial, Difficulty, VideoLabItem } from '../types';
+import { User, Grade, EducationLevel, Course, UserPermissions, Stream, Exam, News, Lesson, Language, ExamResult, Question, Assignment, AssignmentSubmission, AppNotification, ExamType, CourseMaterial, Difficulty, VideoLabItem, Enrollment } from '../types';
 import { dbService } from '../services/dbService';
 import { auth } from '../firebase';
+import { ACADEMIC_SUBJECTS, NATIONAL_CENTER_INFO } from '../constants';
+import ProjectReportPortal from './ProjectReportPortal';
 import { VideoGenerator } from './VideoGenerator';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, PieChart, Pie, AreaChart, Area
 } from 'recharts';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import * as geminiService from '../services/geminiService';
 import { getEthiopianDateString } from '../lib/dateUtils';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
@@ -265,6 +267,7 @@ interface AdminDashboardProps {
   onDeleteAssignment?: (id: string) => void;
   onUpdateSubmission?: (submission: AssignmentSubmission) => void;
   onNavClick: (view: string) => void;
+  currentUser?: User;
 }
 
 const REPORT_TRANSLATIONS = {
@@ -313,9 +316,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onAddAssignment, onUpdateAssignment, onDeleteAssignment,
   onUpdateSubmission,
   onSendSMS,
-  onNavClick
+  onNavClick,
+  currentUser
 }) => {
-  const [activeTab, setActiveTab] = React.useState<'command_center' | 'identities' | 'courses' | 'bulletins' | 'analytics' | 'results' | 'exams' | 'assignments' | 'submissions' | 'videos' | 'database'>('command_center');
+  const [activeTab, setActiveTab] = React.useState<'command_center' | 'identities' | 'courses' | 'bulletins' | 'analytics' | 'results' | 'exams' | 'assignments' | 'submissions' | 'videos' | 'database' | 'project_report' | 'enrollments'>('command_center');
   const [sovereignInsights, setSovereignInsights] = React.useState<{title: string, insight: string, impact: string}[]>([]);
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
 
@@ -323,12 +327,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [reportLang, setReportLang] = useState<'en' | 'om'>('en');
 
+  const [latency, setLatency] = useState<number | null>(null);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+
+  const handleRunDiagnostics = async () => {
+    setIsDiagnosing(true);
+    setNotification({ message: "INITIATING SYSTEM LOAD TEST...", type: 'info' });
+    const ms = await dbService.measureLatency();
+    setLatency(ms);
+    setIsDiagnosing(false);
+    if (ms > 0) {
+      showNotification(`Diagnostics Complete: Latency clocked at ${ms}ms.`, 'success');
+    } else {
+      showNotification("Diagnostics Failure: Registry unreachable.", 'error');
+    }
+  };
+
   const navSections = [
     {
       title: "Core Command",
       items: [
         { id: 'command_center', label: 'Command Center', icon: ShieldCheck },
         { id: 'analytics', label: 'Sovereign Intel', icon: LayoutDashboard },
+        { id: 'project_report', label: 'Project Report', icon: FileText },
       ]
     },
     {
@@ -341,6 +362,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       title: "Academic Content",
       items: [
         { id: 'courses', label: 'Courses', icon: BookOpen },
+        { id: 'enrollments', label: 'Enrollments', icon: Users },
         { id: 'videos', label: 'Video Lab', icon: Video },
       ]
     },
@@ -371,6 +393,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [news, setNews] = useState<News[]>(initialNews);
   const [examResults, setExamResults] = useState<ExamResult[]>(initialResults);
   const [videos, setVideos] = useState<VideoLabItem[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
 
   useEffect(() => {
     setUsers(initialUsers);
@@ -405,7 +428,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const unsub = dbService.subscribeToVideos((data) => {
       setVideos(data);
     });
-    return () => unsub();
+    const unsubEnrollments = dbService.subscribeToEnrollments((data) => {
+      setEnrollments(data);
+    });
+    return () => {
+      unsub();
+      unsubEnrollments();
+    };
   }, [auth.currentUser]);
 
   const performanceData = React.useMemo(() => {
@@ -534,6 +563,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [videoSearch, setVideoSearch] = useState('');
   const [isVideoGenerating, setIsVideoGenerating] = useState(false);
 
+  const [selectedCourseForEnrollment, setSelectedCourseForEnrollment] = useState<Course | null>(null);
+  const [isStudentSearchOpen, setIsStudentSearchOpen] = useState(false);
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+
+  const [isSubjectRegistryOpen, setIsSubjectRegistryOpen] = useState(false);
+  const [subjectRegistry, setSubjectRegistry] = useState<Record<string, string[]>>(ACADEMIC_SUBJECTS);
+  const [newSubjectName, setNewSubjectName] = useState('');
+  const [selectedSubjectKey, setSelectedSubjectKey] = useState<string>('Grade 9-General');
+
+  useEffect(() => {
+    dbService.fetchSovereignSubjects().then(data => {
+      if (Object.keys(data).length > 0) {
+        setSubjectRegistry(data);
+      }
+    });
+  }, []);
+
+  const handleSaveSubjectRegistry = async () => {
+    setIsLoading(true);
+    await dbService.updateSovereignSubjects(subjectRegistry);
+    setIsLoading(false);
+    setIsSubjectRegistryOpen(false);
+    showNotification("National Subject Registry synchronized successfully.", "success");
+  };
+
+  const handleAddSubjectToKey = () => {
+    if (!newSubjectName.trim()) return;
+    const currentList = subjectRegistry[selectedSubjectKey] || [];
+    if (currentList.includes(newSubjectName.trim())) {
+      showNotification("Subject already exists in this registry node.", "info");
+      return;
+    }
+    const updated = {
+      ...subjectRegistry,
+      [selectedSubjectKey]: [...currentList, newSubjectName.trim()]
+    };
+    setSubjectRegistry(updated);
+    setNewSubjectName('');
+  };
+
+  const handleRemoveSubjectFromKey = (key: string, subject: string) => {
+    const updated = {
+      ...subjectRegistry,
+      [key]: subjectRegistry[key].filter(s => s !== subject)
+    };
+    setSubjectRegistry(updated);
+  };
+
   const handleAddAssignment = async (assignment: Assignment, file: File | null) => {
     let rubricUrl = assignment.rubricUrl;
     if (file) {
@@ -547,6 +624,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     await onAddAssignment?.(assignmentWithRubric);
     setAssignments([...assignments, assignmentWithRubric]);
     setIsAssignmentModalOpen(false);
+
+    // Notify relevant students if associated with a course
+    const course = courses.find(c => c.code === assignment.courseCode);
+    if (course) {
+      dbService.notifyRelevantStudents({
+        title: 'New Assignment Deployed',
+        message: `Task: "${assignment.title}" has been added to ${course.title}. Due Date: ${assignment.dueDate}`,
+        type: 'assignment',
+        createdAt: new Date().toISOString(),
+        isRead: false
+      }, course.grade, course.stream);
+    } else {
+      // Fallback to broadcast if no course found
+      dbService.broadcastNotification({
+        title: 'New National Assignment',
+        message: `Task: "${assignment.title}" has been deployed. Check your assignments portal for details.`,
+        type: 'assignment',
+        createdAt: new Date().toISOString(),
+        isRead: false
+      });
+    }
   };
 
   const handleUpdateAssignment = async (assignment: Assignment, file: File | null) => {
@@ -609,6 +707,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsGradingModalOpen(false);
     setSelectedSubmission(null);
     showNotification(`Submission for ${submission.studentName} graded successfully.`, 'success');
+  };
+
+  const handleEnroll = async (userId: string, courseId: string) => {
+    try {
+      await dbService.enrollStudent(userId, courseId);
+      showNotification("Student enrolled in the Sovereign course successfully.", "success");
+    } catch (error) {
+      showNotification("Enrollment failed.", "error");
+    }
+  };
+
+  const handleUnenroll = async (userId: string, courseId: string) => {
+    if (window.confirm("Are you sure you want to drop this student from the course?")) {
+      try {
+        await dbService.unenrollStudent(userId, courseId);
+        showNotification("Student dropped from course successfully.", "info");
+      } catch (error) {
+        showNotification("Unenrollment failed.", "error");
+      }
+    }
   };
 
   const handleDeleteAssignment = async (assignmentId: string) => {
@@ -694,7 +812,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Generation Params
   const [genExamSubject, setGenExamSubject] = useState('');
   const [genExamTopic, setGenExamTopic] = useState('');
-  const [genExamDifficulty, setGenExamDifficulty] = useState('Standard');
+  const [genExamDifficulty, setGenExamDifficulty] = useState('Medium');
   const [genExamQuestionTypes, setGenExamQuestionTypes] = useState<string[]>(['multiple-choice']);
   const [genExamCount, setGenExamCount] = useState(10);
 
@@ -886,6 +1004,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const updatedExam = updatedExams.find(e => e.id === examId);
     if (updatedExam && onUpdateExam) {
       onUpdateExam(updatedExam);
+      
+      // Notify if published
+      if (newStatus === 'published') {
+        dbService.notifyRelevantStudents({
+          title: 'Exam Module Released',
+          message: `The exam "${updatedExam.title}" is now active and ready for your attempt.`,
+          type: 'info',
+          createdAt: new Date().toISOString(),
+          isRead: false
+        }, updatedExam.grade, updatedExam.stream);
+      }
     }
   };
 
@@ -895,6 +1024,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (selectedExams.includes(exam.id)) {
         const updated = { ...exam, status: 'published' as const };
         onUpdateExam(updated);
+        
+        // Notify for each published exam
+        dbService.notifyRelevantStudents({
+          title: 'Exam Module Released',
+          message: `The exam "${updated.title}" is now active and ready for your attempt.`,
+          type: 'info',
+          createdAt: new Date().toISOString(),
+          isRead: false
+        }, updated.grade, updated.stream);
+
         return updated;
       }
       return exam;
@@ -1350,6 +1489,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } else {
       onAddCourse(courseData);
       setCourses(prev => [...prev, courseData]);
+
+      // Notify relevant students about new course deployment
+      dbService.notifyRelevantStudents({
+        title: 'New National Curriculum Module',
+        message: `A new module "${courseData.title}" (${courseData.code}) has been deployed to the registry for your grade/stream.`,
+        type: 'info',
+        createdAt: new Date().toISOString(),
+        isRead: false
+      }, courseData.grade, courseData.stream);
     }
     
     setIsAddingCourse(false);
@@ -1532,11 +1680,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="p-8 border-t-4 border-white/10 space-y-6">
             <div className={`flex items-center gap-4 ${!isSidebarOpen && 'justify-center'}`}>
               <div className="w-10 h-10 rounded-full border-2 border-blue-600 overflow-hidden bg-white">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Jemal&backgroundColor=b6e3f4" alt="Admin" />
+                <img src={adminGroup ? adminGroup.photo : (currentUser?.photo || "https://api.dicebear.com/7.x/avataaars/svg?seed=Jemal&backgroundColor=b6e3f4")} alt="Admin" />
               </div>
               {isSidebarOpen && (
                 <div className="overflow-hidden">
-                  <p className="font-black uppercase text-[10px] truncate">Jemal Fano Haji</p>
+                  <p className="font-black uppercase text-[10px] truncate">{adminGroup ? adminGroup.name : (currentUser?.name || "Jemal Fano Haji")}</p>
                   <p className="text-[8px] text-blue-400 uppercase font-bold">Supreme Admin</p>
                 </div>
               )}
@@ -1596,7 +1744,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div>
                       <h2 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none">Command Center.</h2>
-                      <p className="text-blue-400 font-black uppercase tracking-widest text-sm mt-2">Authorized Access: Jemal Fano Haji</p>
+                      <p className="text-blue-400 font-black uppercase tracking-widest text-sm mt-2">Authorized Access: {currentUser?.name || 'Jemal Fano Haji'}</p>
                     </div>
                   </div>
                   <p className="text-xl md:text-2xl font-bold text-gray-300 max-w-3xl italic">Welcome to the National Digital Education Command. Manage identities, curriculum, and assessments from this centralized hub.</p>
@@ -1640,7 +1788,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                <h2 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter leading-none text-white">
                  {navSections.flatMap(s => s.items).find(i => i.id === activeTab)?.label || 'Sovereign Command'}.
                </h2>
-               <p className="text-blue-400 font-black uppercase tracking-widest text-[10px] mt-4">Authorized Admin Hub: Jemal Fano Haji</p>
+               <p className="text-blue-400 font-black uppercase tracking-widest text-[10px] mt-4">Authorized Admin Hub: {currentUser?.name || 'Jemal Fano Haji'}</p>
             </div>
             <div className="flex gap-8 md:gap-12">
                <div className="text-center group">
@@ -1653,6 +1801,96 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                </div>
             </div>
           </div>
+
+          {/* NEW: Sovereign Provisioning Hub - QUICK ACTIONS FOR USERS/COURSES */}
+          {activeTab === 'command_center' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fadeIn">
+              <div className="bg-white border-8 border-black rounded-[4rem] p-10 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)] space-y-8 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-full h-4 bg-blue-600"></div>
+                <div className="flex items-center gap-6">
+                  <div className="w-20 h-20 bg-blue-50 border-4 border-black rounded-3xl flex items-center justify-center">
+                    <Users className="w-10 h-10 text-blue-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-3xl font-black uppercase italic tracking-tighter">Identity Deployment</h4>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Citizen Registry Protocol</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => {
+                      setEditingUser(null);
+                      setUserForm({ ...initialUserForm, role: 'student', sovereignIndex: (users.length + 1) });
+                      setIsIdentityModalOpen(true);
+                    }}
+                    className="p-6 bg-blue-600 text-white border-4 border-black rounded-2xl font-black uppercase italic text-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all flex flex-col items-center gap-2"
+                  >
+                    <span>Add Student</span>
+                    <Plus size={24} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEditingUser(null);
+                      setUserForm({ ...initialUserForm, role: 'teacher', sovereignIndex: (users.length + 1) });
+                      setIsIdentityModalOpen(true);
+                    }}
+                    className="p-6 bg-black text-white border-4 border-black rounded-2xl font-black uppercase italic text-sm shadow-[8px_8px_0px_0px_rgba(59,130,246,1)] hover:translate-y-1 hover:shadow-none transition-all flex flex-col items-center gap-2"
+                  >
+                    <span>Add Teacher</span>
+                    <Plus size={24} />
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setActiveTab('identities')}
+                  className="w-full py-4 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                >
+                  View Complete Registry →
+                </button>
+              </div>
+
+              <div className="bg-white border-8 border-black rounded-[4rem] p-10 shadow-[20px_20px_0px_0px_rgba(0,0,0,1)] space-y-8 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-full h-4 bg-green-500"></div>
+                <div className="flex items-center gap-6">
+                  <div className="w-20 h-20 bg-green-50 border-4 border-black rounded-3xl flex items-center justify-center">
+                    <BookOpen className="w-10 h-10 text-green-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-3xl font-black uppercase italic tracking-tighter">Curriculum Forge</h4>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Knowledge Module Manifest</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => {
+                      setEditingCourse(null);
+                      setCourseForm(initialCourseForm);
+                      setCourseWizardStep(1);
+                      setIsAddingCourse(true);
+                    }}
+                    className="p-6 bg-green-600 text-white border-4 border-black rounded-2xl font-black uppercase italic text-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all flex flex-col items-center gap-2"
+                  >
+                    <span>Add Course</span>
+                    <FilePlus size={24} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setIsSubjectRegistryOpen(true);
+                    }}
+                    className="p-6 bg-white border-4 border-black rounded-2xl font-black uppercase italic text-sm shadow-[8px_8px_0px_0px_rgba(34,197,94,1)] hover:translate-y-1 hover:shadow-none transition-all flex flex-col items-center gap-2"
+                  >
+                    <span>Define Subject</span>
+                    <Plus size={24} />
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setActiveTab('courses')}
+                  className="w-full py-4 text-[10px] font-black uppercase tracking-[0.2em] text-green-600 hover:bg-green-50 rounded-xl transition-all"
+                >
+                  Manage Curriculum Bank →
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* GitHub Synchronization Hub */}
           <div className="bg-[#1a1a1a] p-10 rounded-[3rem] border-8 border-black shadow-[15px_15px_0px_0px_rgba(34,197,94,1)] flex flex-col md:flex-row items-center justify-between gap-8 group">
@@ -1668,13 +1906,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             
             <div className="flex gap-4 w-full md:w-auto">
               <button 
+                onClick={handleRunDiagnostics}
+                disabled={isDiagnosing}
+                className={`flex-1 md:flex-none px-8 py-5 border-4 border-black rounded-2xl font-black uppercase text-sm transition-all flex items-center justify-center gap-3 ${
+                  latency === null ? 'bg-white text-black' : 
+                  latency < 200 ? 'bg-green-100 text-green-700' : 
+                  latency < 500 ? 'bg-orange-100 text-orange-700' : 'bg-rose-100 text-rose-700'
+                }`}
+              >
+                <Zap className={`w-5 h-5 ${isDiagnosing ? 'animate-pulse text-purple-600' : ''}`} />
+                {isDiagnosing ? 'DIAGNOSING...' : latency !== null ? `${latency}ms Response` : 'Run System Diagnostic'}
+              </button>
+              <button 
                 onClick={() => {
                   setNotification({ message: "STAGING LOCAL REGISTRY MANIFEST...", type: 'info' });
                   setTimeout(() => {
                     setNotification({ message: "PUSHING SOVEREIGN COMMITS TO REPOSITORY...", type: 'info' });
                     setTimeout(() => {
                       setNotification({ message: "SYNC COMPLETE: V.9.2.4-PROD IS LIVE ON GITHUB.", type: 'success' });
-                      window.open('https://github.com/jemalfano030/IFTU-LMS-PORTAL', '_blank');
+                      window.open('https://github.com/jemalfano030/iftu-portal', '_blank');
                     }, 2000);
                   }, 2000);
                 }}
@@ -1687,6 +1937,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {/* Content Views */}
           <div className="min-h-[60vh]">
+            {/* Project Report View */}
+            {activeTab === 'project_report' && (
+              <div className="animate-fadeIn">
+                <ProjectReportPortal />
+              </div>
+            )}
+
             {/* Analytics & Reports View */}
             {activeTab === 'analytics' && (
         <motion.div 
@@ -2885,11 +3142,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                    <div className="space-y-4">
                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Difficulty Level</label>
                      <select className="w-full p-6 border-4 border-black rounded-2xl font-black outline-none" value={genExamDifficulty} onChange={e => setGenExamDifficulty(e.target.value)}>
-                        <option>Introductory</option>
-                        <option>Standard</option>
-                        <option>Intermediate</option>
-                        <option>Advanced</option>
-                        <option>Expert (EAES Prep)</option>
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
                      </select>
                    </div>
                    <div className="space-y-4">
@@ -3362,7 +3617,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setNotification({ message: "INITIATING SOVEREIGN SYNC PROTOCOL...", type: 'info' });
                             setTimeout(() => {
                               setNotification({ message: "MANIFEST VALIDATED. BROADCASTING TO NATIONAL REPOSITORY.", type: 'success' });
-                              window.open('https://github.com/jemalfano030/IFTU-LMS-PORTAL', '_blank');
+                              window.open('https://github.com/jemalfano030/iftu-portal', '_blank');
                             }, 2500);
                           }}
                           className="px-12 py-7 bg-green-600 border-4 border-black text-white font-black uppercase text-lg rounded-[2rem] shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] hover:bg-green-700 hover:translate-y-1 hover:shadow-none transition-all flex items-center justify-center gap-4 group/btn"
@@ -3900,6 +4155,140 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {activeTab === 'enrollments' && (
+        <div className="space-y-12 animate-fadeIn">
+          <div className="flex justify-between items-center bg-white p-10 rounded-[3.5rem] border-8 border-black shadow-[15px_15px_0px_0px_rgba(0,0,0,1)] flex-col md:flex-row gap-8">
+             <div className="space-y-2 text-center md:text-left">
+                <h3 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter text-blue-900 leading-none">Enrollment Ledger.</h3>
+                <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Sovereign Academic Registration Protocol</p>
+             </div>
+             <div className="flex flex-col md:flex-row gap-6 w-full md:w-auto">
+                <div className="relative group min-w-[300px]">
+                  <div className="absolute inset-0 bg-blue-600 rounded-2xl translate-x-2 translate-y-2 group-hover:translate-x-1 group-hover:translate-y-1 transition-transform"></div>
+                  <select 
+                    className="relative w-full bg-white border-4 border-black rounded-2xl p-5 font-black uppercase text-xs outline-none cursor-pointer"
+                    value={selectedCourseForEnrollment?.id || ''}
+                    onChange={(e) => setSelectedCourseForEnrollment(courses.find(c => c.id === e.target.value) || null)}
+                  >
+                    <option value="">Select Target Module...</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.title} ({c.code})</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedCourseForEnrollment && (
+                  <button 
+                    onClick={() => setIsStudentSearchOpen(true)}
+                    className="bg-black text-white px-10 py-5 rounded-2xl border-4 border-black font-black uppercase text-sm shadow-[8px_8px_0px_0px_rgba(59,130,246,1)] hover:translate-y-1 transition-all active:translate-y-2"
+                  >
+                    Enroll Citizen
+                  </button>
+                )}
+             </div>
+          </div>
+
+          {selectedCourseForEnrollment ? (
+             <div className="bg-white border-8 border-black rounded-[4rem] overflow-hidden shadow-[30px_30px_0px_0px_rgba(0,0,0,1)] animate-fadeIn">
+                <div className="p-12 bg-blue-50 border-b-8 border-black flex flex-col md:flex-row justify-between items-center gap-8 relative">
+                   <div className="absolute top-0 left-0 w-full h-2 ethiopian-gradient"></div>
+                   <div className="flex items-center gap-8">
+                      <div className="w-20 h-20 bg-black rounded-3xl flex items-center justify-center text-white border-4 border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                         <BookOpen className="w-10 h-10" />
+                      </div>
+                      <div>
+                         <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-1">{selectedCourseForEnrollment.code} MODULE</p>
+                         <h4 className="text-3xl md:text-4xl font-black uppercase italic leading-none">{selectedCourseForEnrollment.title}</h4>
+                      </div>
+                   </div>
+                   <div className="flex gap-8">
+                      <div className="text-center bg-white p-6 rounded-3xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] min-w-[140px]">
+                         <p className="text-4xl font-black italic">{enrollments.filter(e => e.courseId === selectedCourseForEnrollment.id).length}</p>
+                         <p className="text-[10px] font-black uppercase text-gray-400">Enrolled</p>
+                      </div>
+                      <div className="text-center bg-white p-6 rounded-3xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] min-w-[140px]">
+                         <p className="text-4xl font-black italic">{selectedCourseForEnrollment.grade}</p>
+                         <p className="text-[10px] font-black uppercase text-gray-400">Target Level</p>
+                      </div>
+                   </div>
+                </div>
+                <div className="overflow-x-auto p-8">
+                   <table className="w-full border-separate border-spacing-y-4">
+                      <thead>
+                         <tr className="bg-black text-white">
+                            <th className="p-6 text-left text-[10px] font-black uppercase tracking-widest rounded-l-2xl">Identity</th>
+                            <th className="p-6 text-left text-[10px] font-black uppercase tracking-widest">NID / SID</th>
+                            <th className="p-6 text-left text-[10px] font-black uppercase tracking-widest">Registry Date</th>
+                            <th className="p-6 text-left text-[10px] font-black uppercase tracking-widest">Status</th>
+                            <th className="p-6 text-right text-[10px] font-black uppercase tracking-widest rounded-r-2xl border-l border-white/20">Purge Access</th>
+                         </tr>
+                      </thead>
+                      <tbody>
+                         {enrollments.filter(e => e.courseId === selectedCourseForEnrollment.id).map(enrollment => {
+                            const student = users.find(u => u.id === enrollment.userId);
+                            return (
+                               <tr key={enrollment.id} className="bg-gray-50 border-4 border-black rounded-2xl group hover:bg-blue-50 transition-colors">
+                                  <td className="p-6 border-y-4 border-l-4 border-black rounded-l-2xl">
+                                     <div className="flex items-center gap-5">
+                                        <div className="w-14 h-14 rounded-2xl border-4 border-black overflow-hidden bg-white shadow-[4px_4px_0px_0px_rgba(0,0,0,0.1)] group-hover:scale-110 transition-transform">
+                                           <img src={student?.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student?.id}`} className="w-full h-full object-cover" alt="" />
+                                        </div>
+                                        <div>
+                                           <p className="font-black italic uppercase text-lg leading-tight">{student?.name || 'Unknown Student'}</p>
+                                           <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter">{student?.email}</p>
+                                        </div>
+                                     </div>
+                                  </td>
+                                  <td className="p-6 border-y-4 border-black">
+                                     <p className="text-xs font-black uppercase tabular-nums tracking-widest">{student?.nid || 'UNREGISTERED'}</p>
+                                     <p className="text-[10px] font-bold text-gray-400 uppercase">{student?.studentIdNumber || 'NO SID'}</p>
+                                  </td>
+                                  <td className="p-6 border-y-4 border-black text-xs font-black uppercase italic">
+                                     {new Date(enrollment.enrolledAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  </td>
+                                  <td className="p-6 border-y-4 border-black">
+                                     <span className={`px-4 py-1.5 rounded-full border-4 border-black font-black uppercase text-[9px] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${enrollment.status === 'active' ? 'bg-green-400' : 'bg-gray-300'}`}>
+                                        {enrollment.status}
+                                     </span>
+                                  </td>
+                                  <td className="p-6 border-y-4 border-r-4 border-black rounded-r-2xl text-right">
+                                     <button 
+                                        onClick={() => handleUnenroll(enrollment.userId, enrollment.courseId)}
+                                        className="bg-rose-100 text-rose-600 p-4 rounded-xl border-2 border-black hover:bg-rose-600 hover:text-white transition-all group/btn"
+                                        title="Purge Enrollment Access"
+                                     >
+                                        <Trash2 className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
+                                     </button>
+                                  </td>
+                               </tr>
+                            );
+                         })}
+                      </tbody>
+                   </table>
+                   {enrollments.filter(e => e.courseId === selectedCourseForEnrollment.id).length === 0 && (
+                      <div className="py-20 text-center space-y-4">
+                         <p className="text-4xl">📭</p>
+                         <p className="text-xl font-black uppercase italic text-gray-300">No students currently enrolled in this module.</p>
+                      </div>
+                   )}
+                </div>
+             </div>
+          ) : (
+             <div className="p-32 text-center bg-gray-50 border-[10px] border-black rounded-[5rem] border-dashed relative overflow-hidden group">
+                <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="relative z-10 space-y-8">
+                   <div className="w-40 h-40 bg-white border-8 border-black rounded-full mx-auto flex items-center justify-center text-7xl shadow-[15px_15px_0px_0px_rgba(0,0,0,1)] animate-float">
+                      📋
+                   </div>
+                   <div className="space-y-4">
+                      <h4 className="text-4xl md:text-5xl font-black uppercase italic text-black tracking-tighter">Identity Selection Required.</h4>
+                      <p className="text-lg font-bold text-gray-400 max-w-2xl mx-auto uppercase">Select an active sovereign module from the register above to begin managing student academic access protocols.</p>
+                   </div>
+                </div>
+             </div>
+          )}
+        </div>
+      )}
+
       {/* Exams View */}
       {activeTab === 'exams' && (
         <div className="space-y-12 animate-fadeIn">
@@ -4393,9 +4782,160 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Student Enrollment Search Modal */}
+      {isStudentSearchOpen && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl flex items-center justify-center z-[9000] p-4 md:p-8">
+          <div className="bg-white p-8 md:p-16 rounded-[4rem] border-[10px] border-black w-full max-w-3xl my-auto shadow-[40px_40px_0px_0px_rgba(59,130,246,1)] relative animate-bounceIn">
+            <button onClick={() => setIsStudentSearchOpen(false)} className="absolute top-8 right-8 text-5xl font-black hover:text-rose-600 transition-colors">✕</button>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic mb-10 border-b-8 border-black pb-6 text-blue-900 tracking-tighter">Enroll New Identity.</h2>
+            
+            <div className="relative mb-10 group">
+              <div className="absolute inset-0 bg-black rounded-2xl translate-x-1.5 translate-y-1.5 group-focus-within:translate-x-1 group-focus-within:translate-y-1 transition-transform"></div>
+              <div className="relative flex items-center">
+                <Search className="absolute left-6 text-black w-6 h-6" />
+                <input 
+                  type="text" 
+                  placeholder="Registry Search (Name, Email, NID)..."
+                  value={studentSearchQuery}
+                  onChange={(e) => setStudentSearchQuery(e.target.value)}
+                  className="w-full p-6 pl-16 border-4 border-black rounded-2xl font-black uppercase italic text-sm outline-none focus:bg-blue-50 transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="max-h-[450px] overflow-y-auto space-y-6 custom-scrollbar pr-4">
+              {users
+                .filter(u => u.role === 'student' && 
+                  (u.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) || 
+                   u.email.toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
+                   (u.nid && u.nid.toLowerCase().includes(studentSearchQuery.toLowerCase()))) &&
+                  !enrollments.some(e => e.userId === u.id && e.courseId === selectedCourseForEnrollment?.id)
+                )
+                .map(student => (
+                  <div key={student.id} className="p-6 bg-gray-50 border-4 border-black rounded-[2.5rem] flex items-center justify-between group hover:bg-blue-50 transition-all hover:scale-[1.02] active:scale-[0.98]">
+                    <div className="flex items-center gap-6">
+                       <div className="w-16 h-16 rounded-2xl border-4 border-black overflow-hidden bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,0.1)]">
+                          <img src={student.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`} className="w-full h-full object-cover" alt="" />
+                       </div>
+                       <div>
+                          <p className="font-black italic uppercase text-lg leading-tight">{student.name}</p>
+                          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tight">{student.email}</p>
+                          <p className="text-[10px] font-black text-gray-400 uppercase mt-1">NID: {student.nid || 'PENDING'}</p>
+                       </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (selectedCourseForEnrollment) {
+                          handleEnroll(student.id, selectedCourseForEnrollment.id);
+                          setIsStudentSearchOpen(false);
+                          setStudentSearchQuery('');
+                        }
+                      }}
+                      className="bg-green-600 text-white px-8 py-3 rounded-2xl border-4 border-black font-black uppercase text-xs shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 transition-all active:translate-y-2 active:shadow-none"
+                    >
+                      Authorize
+                    </button>
+                  </div>
+                ))}
+              {studentSearchQuery && users.filter(u => u.role === 'student' && (u.name.toLowerCase().includes(studentSearchQuery.toLowerCase()) || u.email.toLowerCase().includes(studentSearchQuery.toLowerCase()))).length === 0 && (
+                <div className="text-center py-20 bg-gray-100 rounded-[3rem] border-4 border-black border-dashed">
+                   <p className="text-6xl mb-6">🔍</p>
+                   <p className="text-gray-400 font-black uppercase italic tracking-widest">No matching identities found in registry.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
           </div>
         </div>
       </main>
+
+      {/* Subject Registry Modal */}
+      {isSubjectRegistryOpen && (
+        <div className="fixed inset-0 z-[9000] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-8 animate-fadeIn overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-[4rem] border-[10px] border-black p-8 md:p-16 shadow-[40px_40px_0px_0px_rgba(34,197,94,1)] my-auto relative">
+            <button onClick={() => setIsSubjectRegistryOpen(false)} className="absolute top-8 right-8 text-4xl font-black hover:text-rose-600 transition-colors">✕</button>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic mb-8 border-b-8 border-black pb-6 leading-none tracking-tighter">Subject Architect.</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+              <div className="space-y-6">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 block">Registry Node (Grade - Stream)</label>
+                  <select 
+                    className="w-full p-5 border-4 border-black rounded-2xl font-black text-sm outline-none bg-gray-50 focus:bg-white transition-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                    value={selectedSubjectKey}
+                    onChange={(e) => setSelectedSubjectKey(e.target.value)}
+                  >
+                    {[
+                      'Grade 9-General', 'Grade 10-General',
+                      'Grade 11-Natural Science', 'Grade 12-Natural Science',
+                      'Grade 11-Social Science', 'Grade 12-Social Science',
+                      'TVET Level 1-General', 'TVET Level 2-General',
+                      'TVET Level 3-General', 'TVET Level 4-General'
+                    ].map(key => (
+                      <option key={key} value={key}>{key.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="bg-gray-50 p-6 rounded-3xl border-4 border-black space-y-4">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">Deploy New Subject to Node</label>
+                  <div className="flex gap-4">
+                    <input 
+                      type="text" 
+                      className="flex-1 p-4 border-4 border-black rounded-xl font-black text-sm outline-none"
+                      placeholder="e.g. Astrophysics"
+                      value={newSubjectName}
+                      onChange={(e) => setNewSubjectName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddSubjectToKey()}
+                    />
+                    <button 
+                      onClick={handleAddSubjectToKey}
+                      className="bg-black text-white p-4 rounded-xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(34,197,94,1)] hover:translate-y-0.5 active:shadow-none transition-all"
+                    >
+                      <Plus className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <h4 className="text-xl font-black uppercase italic border-l-4 border-green-500 pl-4">Active Subject Bank</h4>
+                <div className="bg-white border-4 border-black rounded-3xl p-6 h-[300px] overflow-y-auto space-y-3 shadow-inner">
+                  {subjectRegistry[selectedSubjectKey]?.map(subject => (
+                    <div key={subject} className="flex justify-between items-center p-4 bg-gray-50 border-2 border-black rounded-xl group hover:bg-red-50 transition-colors">
+                      <span className="font-black italic text-sm">{subject}</span>
+                      <button 
+                        onClick={() => handleRemoveSubjectFromKey(selectedSubjectKey, subject)}
+                        className="text-gray-300 hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {(!subjectRegistry[selectedSubjectKey] || subjectRegistry[selectedSubjectKey].length === 0) && (
+                    <p className="text-center text-gray-400 italic font-bold py-10">No subjects in this node.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-12 pt-8 border-t-8 border-black flex justify-end gap-6">
+               <button onClick={() => setIsSubjectRegistryOpen(false)} className="px-10 py-5 border-4 border-black rounded-2xl font-black uppercase italic text-sm hover:bg-gray-50 transition-all">Cancel</button>
+               <button 
+                onClick={handleSaveSubjectRegistry}
+                disabled={isLoading}
+                className="px-12 py-5 bg-black text-white border-4 border-black rounded-2xl font-black uppercase italic text-sm shadow-[8px_8px_0px_0px_rgba(34,197,94,1)] hover:translate-y-1 active:shadow-none transition-all flex items-center gap-3"
+               >
+                 {isLoading ? 'SYNCING...' : 'Synchronize Subject Registry'}
+                 <Database size={20} />
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <GradingModal 
         isOpen={isGradingModalOpen} 

@@ -88,8 +88,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title, onEnded, autoPlay
       if (onEnded) onEnded();
     };
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+    };
     const handlePause = () => setIsPlaying(false);
+    const handleWaiting = () => setIsLoading(true);
+    const handleCanPlay = () => setIsLoading(false);
 
     video.addEventListener('timeupdate', updateTime);
     video.addEventListener('loadedmetadata', updateDuration);
@@ -97,6 +102,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title, onEnded, autoPlay
     video.addEventListener('ended', handleEnded);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', handleCanPlay);
 
     if (autoPlay) {
       video.play().catch(() => {
@@ -112,15 +119,76 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title, onEnded, autoPlay
       video.removeEventListener('ended', handleEnded);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', handleCanPlay);
     };
   }, [src, isYouTube, autoPlay, onEnded]);
 
   const togglePlay = () => {
     if (videoRef.current) {
-      if (isPlaying) videoRef.current.pause();
-      else videoRef.current.play();
+      if (videoRef.current.paused) videoRef.current.play();
+      else videoRef.current.pause();
     }
   };
+
+  const skip = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime += seconds;
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isYouTube) return;
+      
+      // Don't trigger if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setVolume(prev => {
+            const newVol = Math.min(1, Math.round((prev + 0.1) * 10) / 10);
+            if (videoRef.current) {
+              videoRef.current.volume = newVol;
+              videoRef.current.muted = false;
+            }
+            setIsMuted(false);
+            return newVol;
+          });
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setVolume(prev => {
+            const newVol = Math.max(0, Math.round((prev - 0.1) * 10) / 10);
+            if (videoRef.current) {
+              videoRef.current.volume = newVol;
+              videoRef.current.muted = newVol === 0;
+            }
+            setIsMuted(newVol === 0);
+            return newVol;
+          });
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skip(-10);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skip(10);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isYouTube]);
 
   const handleMouseMove = () => {
     setShowControls(true);
@@ -136,12 +204,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({ src, title, onEnded, autoPlay
       videoRef.current.currentTime = time;
     }
     setProgress(parseFloat(e.target.value));
-  };
-
-  const skip = (seconds: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime += seconds;
-    }
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -1,30 +1,34 @@
 import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FileText, Clock, CheckCircle2, AlertCircle, Upload, 
   Search, Filter, ChevronRight, Download, Send, 
   Award, MessageSquare, ExternalLink, Trash2, Edit3
 } from 'lucide-react';
-import { User, Assignment, AssignmentSubmission } from '../types';
+import { User, Assignment, AssignmentSubmission, Course } from '../types';
 import { dbService } from '../services/dbService';
 
 interface AssignmentPortalProps {
   currentUser: User;
   assignments: Assignment[];
   submissions: AssignmentSubmission[];
+  courses: Course[];
 }
 
 export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({ 
   currentUser, 
   assignments, 
-  submissions 
+  submissions,
+  courses
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'submitted' | 'graded'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'submitted' | 'graded' | 'resubmit'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<AssignmentSubmission | null>(null);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isGradeModalOpen, setIsGradeModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Student Helpers
   const getSubmissionForAssignment = (assignmentId: string) => {
@@ -47,13 +51,15 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
         total: assignments.length,
         submitted: studentSubs.length,
         graded: studentSubs.filter(s => s.status === 'graded').length,
-        pending: assignments.length - studentSubs.length
+        resubmit: studentSubs.filter(s => s.status === 'resubmission_required').length,
+        pending: assignments.length - studentSubs.filter(s => s.status === 'submitted' || s.status === 'graded').length
       };
     } else {
       return {
         total: assignments.length,
         totalSubmissions: submissions.length,
         pendingGrading: submissions.filter(s => s.status === 'submitted').length,
+        resubmitRequested: submissions.filter(s => s.status === 'resubmission_required').length,
         published: assignments.filter(a => a.status === 'published').length
       };
     }
@@ -68,68 +74,93 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
 
       if (currentUser.role === 'student') {
         const sub = getSubmissionForAssignment(a.id);
-        if (activeTab === 'pending') return !sub;
+        if (activeTab === 'pending') return !sub || sub.status === 'resubmission_required';
         if (activeTab === 'submitted') return sub && sub.status === 'submitted';
         if (activeTab === 'graded') return sub && sub.status === 'graded';
+        if (activeTab === 'resubmit') return sub && sub.status === 'resubmission_required';
       } else {
         const teacherSubs = getSubmissionsForAssignment(a.id);
         if (activeTab === 'pending') return teacherSubs.some(s => s.status === 'submitted');
         if (activeTab === 'submitted') return teacherSubs.length > 0;
         if (activeTab === 'graded') return teacherSubs.some(s => s.status === 'graded');
+        if (activeTab === 'resubmit') return teacherSubs.some(s => s.status === 'resubmission_required');
       }
 
       return true;
     }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [assignments, searchTerm, activeTab, currentUser, submissions]);
 
-  const handleFileUpload = async (assignment: Assignment, fileUrl: string) => {
-    const submission: AssignmentSubmission = {
-      id: `${assignment.id}_${currentUser.id}`,
-      assignmentId: assignment.id,
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      submittedAt: new Date().toISOString(),
-      fileUrl: fileUrl,
-      status: 'submitted'
-    };
-
+  const handleFileSubmit = async (assignment: Assignment, file: File) => {
+    setIsUploading(true);
+    setUploadError(null);
     try {
+      const fileUrl = await dbService.uploadSubmissionFile(assignment.id, currentUser.id, file);
+      
+      const submission: AssignmentSubmission = {
+        id: `${assignment.id}_${currentUser.id}`,
+        assignmentId: assignment.id,
+        studentId: currentUser.id,
+        studentName: currentUser.name,
+        submittedAt: new Date().toISOString(),
+        fileUrl: fileUrl,
+        status: 'submitted'
+      };
+
       await dbService.syncSubmission(submission);
+      
+      // Notify Teacher/Instructor
+      const course = courses.find(c => c.code === assignment.courseCode);
+      const recipientId = course?.instructorId || 'admin';
+      
       await dbService.createNotification({
-        userId: 'admin', // Or the specific teacher/instructor ID if available
-        title: 'New Assignment Submission',
-        message: `${currentUser.name} submitted work for ${assignment.title}`,
+        userId: recipientId,
+        title: 'Payload Transmitted',
+        message: `Student ${currentUser.name} uploaded '${file.name}' for '${assignment.title}'.`,
         type: 'submission',
         isRead: false,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        link: `/teacher/assignments/${assignment.id}`
       });
+      
       setIsSubmitModalOpen(false);
       setSelectedAssignment(null);
     } catch (error) {
       console.error("Submission failed:", error);
+      setUploadError("Deployment of work failed. Please check your connectivity and try again.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const handleGrading = async (submission: AssignmentSubmission, grade: number, feedback: string) => {
+  const handleGrading = async (submission: AssignmentSubmission, grade: number, feedback: string, status: 'graded' | 'resubmission_required' = 'graded') => {
     const updatedSubmission: AssignmentSubmission = {
       ...submission,
       grade,
       feedback,
-      status: 'graded',
+      status,
       gradedBy: currentUser.name,
       gradedAt: new Date().toISOString()
     };
 
     try {
       await dbService.syncSubmission(updatedSubmission);
+      
+      // Notify Student
+      const assignment = assignments.find(a => a.id === submission.assignmentId);
+      const isResubmit = status === 'resubmission_required';
+      
       await dbService.createNotification({
         userId: submission.studentId,
-        title: 'Assignment Graded',
-        message: `Your submission for ${assignments.find(a => a.id === submission.assignmentId)?.title} has been graded.`,
-        type: 'grade',
+        title: isResubmit ? 'Resubmission Requested' : 'Assignment Graded',
+        message: isResubmit 
+          ? `Updates required for '${assignment?.title}'. Feedback: ${feedback}`
+          : `Assignment '${assignment?.title}' has been graded. Score: ${grade}/${assignment?.points}.`,
+        type: isResubmit ? 'assignment' : 'grade',
         isRead: false,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        link: `/assignments/${submission.assignmentId}`
       });
+      
       setIsGradeModalOpen(false);
       setSelectedSubmission(null);
     } catch (error) {
@@ -150,19 +181,21 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full md:w-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 w-full md:w-auto">
           {currentUser.role === 'student' ? (
             <>
               <StatCard label="Total" value={stats.total} color="bg-blue-50" />
               <StatCard label="Submitted" value={stats.submitted} color="bg-green-50" />
               <StatCard label="Graded" value={stats.graded} color="bg-purple-50" />
-              <StatCard label="Pending" value={stats.pending} color="bg-rose-50" />
+              <StatCard label="Resubmit" value={stats.resubmit} color="bg-rose-50" />
+              <StatCard label="Pending" value={stats.pending} color="bg-gray-50" />
             </>
           ) : (
             <>
               <StatCard label="Assignments" value={stats.total} color="bg-blue-50" />
               <StatCard label="Submissions" value={stats.totalSubmissions} color="bg-green-50" />
               <StatCard label="Pending Grade" value={stats.pendingGrading} color="bg-rose-50" />
+              <StatCard label="Resubmit Requests" value={stats.resubmitRequested} color="bg-orange-50" />
               <StatCard label="Published" value={stats.published} color="bg-purple-50" />
             </>
           )}
@@ -183,7 +216,7 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
         </div>
         
         <div className="flex items-center gap-4 bg-gray-100 p-3 rounded-3xl border-4 border-black overflow-x-auto">
-          {['all', 'pending', 'submitted', 'graded'].map((tab) => (
+          {['all', 'pending', 'submitted', 'graded', 'resubmit'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -239,11 +272,13 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
                     </div>
                     {currentUser.role === 'student' ? (
                       <div className={`p-4 rounded-2xl border-4 border-black ${
-                        submission?.status === 'graded' ? 'bg-green-50' : submission ? 'bg-blue-50' : 'bg-rose-50'
+                        submission?.status === 'graded' ? 'bg-green-50' : 
+                        submission?.status === 'resubmission_required' ? 'bg-rose-50' :
+                        submission ? 'bg-blue-50' : 'bg-gray-50'
                       }`}>
                         <div className="text-[8px] font-black uppercase text-gray-400 mb-1 font-sans">Status</div>
                         <div className="text-[10px] font-black uppercase italic">
-                          {submission ? submission.status : 'Pending'}
+                          {submission ? submission.status.replace('_', ' ') : 'Pending'}
                         </div>
                       </div>
                     ) : (
@@ -335,19 +370,43 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
               </div>
 
               <div className="space-y-6">
-                <label className="text-xs font-black uppercase tracking-widest text-gray-400">File Transmission URL</label>
+                <label className="text-xs font-black uppercase tracking-widest text-gray-400">File Transmission Protocol</label>
                 <div className="relative">
-                  <ExternalLink className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input 
-                    type="text" 
-                    placeholder="Enter your document link (Google Drive, OID, etc...)"
-                    className="w-full pl-16 pr-8 py-6 bg-white border-4 border-black rounded-3xl font-black uppercase text-sm outline-none focus:shadow-[8px_8px_0px_0px_rgba(34,197,94,1)] transition-all"
-                    onBlur={(e) => {
-                       if (e.target.value) handleFileUpload(selectedAssignment, e.target.value);
+                    type="file" 
+                    id="assignment-file"
+                    className="hidden"
+                    onChange={(e) => {
+                       const file = e.target.files?.[0];
+                       if (file) handleFileSubmit(selectedAssignment, file);
                     }}
+                    accept=".pdf,.docx,.doc,.ppt,.pptx"
                   />
+                  <label 
+                    htmlFor="assignment-file"
+                    className={`w-full flex flex-col items-center justify-center gap-6 p-12 border-8 border-dashed border-black rounded-[3rem] cursor-pointer hover:bg-blue-50 transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    {isUploading ? (
+                      <div className="animate-spin text-blue-600">
+                        <Upload size={48} />
+                      </div>
+                    ) : (
+                      <Upload size={48} className="text-gray-400" />
+                    )}
+                    <div className="text-center space-y-2">
+                       <p className="text-xl font-black uppercase italic">
+                        {isUploading ? 'Transmitting Data...' : 'Select Deployment File'}
+                       </p>
+                       <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Supported: PDF, DOCX, PPTX (MAX 25MB)</p>
+                    </div>
+                  </label>
                 </div>
-                <p className="text-[10px] font-bold text-gray-400 italic text-center">Ensure permissions are set to 'Anyone with the link'</p>
+                {uploadError && (
+                  <div className="p-4 bg-rose-50 border-4 border-rose-600 text-rose-600 rounded-2xl font-black text-xs flex items-center gap-3">
+                    <AlertCircle size={16} />
+                    {uploadError}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -501,13 +560,22 @@ export const AssignmentPortal: React.FC<AssignmentPortalProps> = ({
                      </div>
                   </div>
 
-                  <button 
-                    onClick={() => handleGrading(selectedSubmission, selectedSubmission.grade || 0, selectedSubmission.feedback || '')}
-                    className="w-full py-6 bg-purple-600 text-white rounded-2xl border-4 border-black font-black uppercase text-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all flex items-center justify-center gap-4"
-                  >
-                    <Send className="w-5 h-5" />
-                    Finalize & Notify Student
-                  </button>
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <button 
+                      onClick={() => handleGrading(selectedSubmission, selectedSubmission.grade || 0, selectedSubmission.feedback || '')}
+                      className="flex-1 py-6 bg-purple-600 text-white rounded-2xl border-4 border-black font-black uppercase text-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all flex items-center justify-center gap-4"
+                    >
+                      <Send className="w-5 h-5" />
+                      Finalize & Notify
+                    </button>
+                    <button 
+                      onClick={() => handleGrading(selectedSubmission, 0, selectedSubmission.feedback || '', 'resubmission_required')}
+                      className="px-8 py-6 bg-rose-500 text-white rounded-2xl border-4 border-black font-black uppercase text-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:translate-y-1 hover:shadow-none transition-all flex items-center justify-center gap-4"
+                    >
+                      <AlertCircle className="w-5 h-5" />
+                      Resubmit
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

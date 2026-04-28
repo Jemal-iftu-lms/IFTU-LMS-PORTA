@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { CheckCircle2, Bookmark, Lock, Play, Download, FileText, Sparkles } from 'lucide-react';
 import { Course, Stream, Language } from '../types';
 import { NATIONAL_CENTER_INFO } from '../constants';

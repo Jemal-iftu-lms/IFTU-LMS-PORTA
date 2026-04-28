@@ -3,20 +3,47 @@ import React, { useState, useRef, useEffect } from 'react';
 import { askTutor } from '../services/geminiService';
 import { Language } from '../types';
 import { GoogleGenAI, Modality } from "@google/genai";
-import { Paperclip, X, FileText, Mic, MicOff, Send, Brain, Volume2 } from 'lucide-react';
+import { Paperclip, X, FileText, Mic, MicOff, Send, Brain, Volume2, RotateCcw } from 'lucide-react';
 
-const AITutor: React.FC = () => {
-  const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string; attachmentName?: string }[]>([
-    { role: 'ai', text: 'Salam! I am IFTU AI. How can I assist with your Ethiopian National Curriculum (EAES) studies today? You can also upload documents or images for me to analyze.' }
-  ]);
+interface AITutorProps {
+  contextContent?: string;
+  contextTitle?: string;
+  initialPrompt?: string;
+}
+
+const AITutor: React.FC<AITutorProps> = ({ contextContent, contextTitle, initialPrompt }) => {
+  const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string; attachmentName?: string; isError?: boolean }[]>([]);
   const [input, setInput] = useState('');
+
+  // Auto-initialize messages
+  useEffect(() => {
+    let welcome = 'Salam! I am IFTU AI (Sovereign Lab). How can I assist with your studies today?';
+    if (contextTitle) {
+      welcome = `Salam! I am IFTU AI. I see you are studying "${contextTitle}". How can I help you understand this lesson better?`;
+    }
+    setMessages([{ role: 'ai', text: welcome }]);
+
+    if (initialPrompt) {
+      handleSend(initialPrompt);
+    }
+  }, [contextTitle]);
   const [isLoading, setIsLoading] = useState(false);
   const [lang, setLang] = useState<Language>('en');
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [isHandsFree, setIsHandsFree] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(false);
   const [attachment, setAttachment] = useState<{ name: string, data: string, mimeType: string } | null>(null);
   const [parsedContent, setParsedContent] = useState<string>('');
+  const [activeContextTitle, setActiveContextTitle] = useState<string>(contextTitle || '');
+  const [activeContextContent, setActiveContextContent] = useState<string>(contextContent || '');
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Sync props to state for clearability
+  useEffect(() => {
+    setActiveContextTitle(contextTitle || '');
+    setActiveContextContent(contextContent || '');
+  }, [contextTitle, contextContent]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
 
@@ -25,38 +52,98 @@ const AITutor: React.FC = () => {
   }, [messages, isLoading]);
 
   useEffect(() => {
+    let timer: any;
+    if (isHandsFree && !isListening && !isSpeaking && !isLoading) {
+      timer = setTimeout(() => {
+        // Double check conditions haven't changed during the delay
+        if (isHandsFree && !isListening && !isSpeaking && !isLoading) {
+          toggleListening();
+        }
+      }, 1500); // Increased delay
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isHandsFree, isListening, isSpeaking, isLoading]);
+
+  useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
+      recognitionRef.current.interimResults = true;
       
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
+      };
+
       recognitionRef.current.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(prev => prev + (prev ? ' ' : '') + transcript);
-        setIsListening(false);
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0])
+          .map(result => result.transcript)
+          .join('');
+        
+        if (event.results[0].isFinal) {
+          const finalTranscript = transcript.trim();
+          if (finalTranscript) {
+            setInput(finalTranscript);
+            if (isHandsFree) {
+              handleSend(finalTranscript);
+            }
+          }
+          setIsListening(false);
+        }
       };
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
+        if (event.error === 'not-allowed') {
+          alert("Microphone permission was denied. Please click the padlock in your browser's address bar and set Microphone to 'Allow', then refresh.");
+        }
       };
 
       recognitionRef.current.onend = () => {
         setIsListening(false);
       };
     }
-  }, []);
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+    };
+  }, [isHandsFree, lang]);
 
   const toggleListening = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      try {
+        recognitionRef.current?.stop();
+      } catch (e) {
+        console.error("Error stopping recognition:", e);
+      }
       setIsListening(false);
     } else {
       if (recognitionRef.current) {
-        recognitionRef.current.lang = lang === 'am' ? 'am-ET' : lang === 'om' ? 'om-ET' : 'en-US';
-        recognitionRef.current.start();
-        setIsListening(true);
+        try {
+          recognitionRef.current.lang = lang === 'am' ? 'am-ET' : lang === 'om' ? 'om-ET' : 'en-US';
+          recognitionRef.current.start();
+          // setIsListening(true); // Don't set here, let onstart handle it
+        } catch (e: any) {
+          if (e.name === 'InvalidStateError') {
+            console.warn("Recognition already started, ignoring toggle.");
+          } else {
+            console.error("Error starting recognition:", e);
+          }
+        }
       } else {
         alert("Speech recognition is not supported in your browser.");
       }
@@ -101,9 +188,11 @@ const AITutor: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !attachment) || isLoading) return;
-    const userMsg = input;
+  const handleSend = async (voiceText?: string) => {
+    const messageToSend = voiceText || input;
+    if ((!messageToSend.trim() && !attachment) || isLoading) return;
+    
+    const userMsg = messageToSend;
     const currentAttachment = attachment;
     const currentParsedContent = parsedContent;
     
@@ -119,11 +208,27 @@ const AITutor: React.FC = () => {
     
     setIsLoading(true);
     try {
-      const response = await askTutor(userMsg, lang, currentParsedContent || undefined, currentAttachment || undefined);
-      setMessages(prev => [...prev, { role: 'ai', text: response || 'Failed to connect.' }]);
+      const activeContext = activeContextContent || currentParsedContent || undefined;
+      const response = await askTutor(userMsg, lang, activeContext, currentAttachment || undefined);
+      
+      const isErrorMessage = response === "I'm sorry, the connection to the National AI Lab was interrupted. Please check your internet or try a different question.";
+      
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        text: response || 'Failed to connect.',
+        isError: isErrorMessage
+      }]);
+      
+      if (!isErrorMessage && (isHandsFree || autoSpeak) && response) {
+        speakResponse(response);
+      }
     } catch (error) {
       console.error("Tutor Error:", error);
-      setMessages(prev => [...prev, { role: 'ai', text: 'Sorry, I encountered an error processing your request.' }]);
+      setMessages(prev => [...prev, { 
+        role: 'ai', 
+        text: 'Sorry, I encountered a critical error. Please try refreshing or checking your connectivity.',
+        isError: true
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -132,10 +237,31 @@ const AITutor: React.FC = () => {
   const speakResponse = async (text: string) => {
     if (isSpeaking) return;
     setIsSpeaking(true);
+    
+    // Try Browser TTS first for Amharic/Oromiffa or if Gemini fails
+    const runBrowserTTS = () => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      if (lang === 'am') utterance.lang = 'am-ET';
+      else if (lang === 'om') utterance.lang = 'om-ET';
+      else utterance.lang = 'en-US';
+      
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        if (isHandsFree) setTimeout(() => !isListening && toggleListening(), 1000);
+      };
+      utterance.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utterance);
+    };
+
+    if (lang === 'am' || lang === 'om') {
+      runBrowserTTS();
+      return;
+    }
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: `Say clearly in a professional educational tone: ${text}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -164,14 +290,17 @@ const AITutor: React.FC = () => {
         const source = audioCtx.createBufferSource();
         source.buffer = buffer;
         source.connect(audioCtx.destination);
-        source.onended = () => setIsSpeaking(false);
+        source.onended = () => {
+          setIsSpeaking(false);
+          if (isHandsFree) setTimeout(() => !isListening && toggleListening(), 1000);
+        };
         source.start();
       } else {
-        setIsSpeaking(false);
+        runBrowserTTS();
       }
     } catch (err) {
-      console.error("TTS Error:", err);
-      setIsSpeaking(false);
+      console.error("TTS Gemini Error, falling back to browser:", err);
+      runBrowserTTS();
     }
   };
 
@@ -188,23 +317,65 @@ const AITutor: React.FC = () => {
               <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Sovereign Knowledge Engine v4.0</p>
             </div>
          </div>
-         <div className="flex gap-4">
-            {(['en', 'am', 'om'] as Language[]).map(l => (
-              <button 
-                key={l}
-                onClick={() => setLang(l)}
-                className={`w-12 h-12 rounded-xl border-4 border-black font-black uppercase text-xs transition-all ${lang === l ? 'bg-yellow-400 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white text-gray-400'}`}
-              >
-                {l}
-              </button>
-            ))}
+         <div className="flex flex-col md:flex-row gap-4 items-center">
+            {activeContextTitle && (
+              <div className="flex items-center gap-2">
+                <div className="px-4 py-2 bg-yellow-400 text-black border-4 border-black rounded-xl font-black text-[10px] uppercase flex items-center gap-2 animate-bounce">
+                  <FileText size={14} />
+                  Context: {activeContextTitle}
+                </div>
+                <button 
+                  onClick={() => {
+                    setActiveContextTitle('');
+                    setActiveContextContent('');
+                  }}
+                  className="bg-black text-white p-2 rounded-lg border-2 border-white hover:bg-white hover:text-black transition-colors"
+                  title="Clear Lesson Context"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )}
+            <div className="flex gap-4">
+               <button 
+                 onClick={() => setAutoSpeak(!autoSpeak)}
+                 className={`px-4 py-2 rounded-xl border-4 border-black font-black uppercase text-[10px] transition-all flex items-center gap-2 ${autoSpeak ? 'bg-indigo-500 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white text-gray-400'}`}
+                 title="Auto-Read: AI will always read responses aloud"
+               >
+                 <Volume2 size={14} />
+                 Auto-Read
+               </button>
+               <button 
+                 onClick={() => setIsHandsFree(!isHandsFree)}
+                 className={`px-4 py-2 rounded-xl border-4 border-black font-black uppercase text-[10px] transition-all flex items-center gap-2 ${isHandsFree ? 'bg-green-500 text-white shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white text-gray-400'}`}
+                 title="Hands-Free Mode: Automatic send and reply"
+               >
+                 <div className={`w-3 h-3 rounded-full ${isHandsFree ? 'bg-white animate-pulse' : 'bg-gray-300'}`}></div>
+                 Hands-Free
+               </button>
+               {(['en', 'am', 'om'] as Language[]).map(l => (
+                 <button 
+                   key={l}
+                   onClick={() => setLang(l)}
+                   className={`w-12 h-12 rounded-xl border-4 border-black font-black uppercase text-xs transition-all ${lang === l ? 'bg-yellow-400 text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white text-gray-400'}`}
+                 >
+                   {l}
+                 </button>
+               ))}
+            </div>
          </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-10 space-y-8 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-gray-50">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`relative group max-w-[85%] p-8 rounded-[3rem] border-4 border-black shadow-xl font-black text-xl leading-relaxed ${m.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-900 rounded-bl-none'}`}>
+            <div className={`relative group max-w-[85%] p-8 rounded-[3rem] border-4 border-black shadow-xl font-black text-xl leading-relaxed ${
+              m.role === 'user' 
+                ? 'bg-blue-600 text-white rounded-br-none' 
+                : m.isError 
+                  ? 'bg-red-50 text-red-600 border-red-600 rounded-bl-none italic' 
+                  : 'bg-white text-gray-900 rounded-bl-none'
+            }`}>
               {m.attachmentName && (
                 <div className="flex items-center gap-2 mb-4 bg-black/20 p-3 rounded-2xl w-fit">
                   <FileText size={20} />
@@ -212,15 +383,29 @@ const AITutor: React.FC = () => {
                 </div>
               )}
               {m.text}
-              {m.role === 'ai' && (
+              {m.isError && (
                 <button 
-                  onClick={() => speakResponse(m.text)}
-                  disabled={isSpeaking}
-                  className="absolute -bottom-4 -right-4 w-12 h-12 bg-yellow-400 border-4 border-black rounded-full flex items-center justify-center text-xl shadow-lg hover:scale-110 active:scale-95 transition-all disabled:grayscale"
-                  title="Listen to response"
+                  onClick={() => {
+                    const lastUserMsg = [...messages].reverse().find(msg => msg.role === 'user')?.text;
+                    if (lastUserMsg) handleSend(lastUserMsg);
+                  }}
+                  className="mt-4 flex items-center gap-2 text-sm bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition-colors"
                 >
-                  {isSpeaking ? '⏳' : <Volume2 size={20} />}
+                  <RotateCcw size={14} />
+                  Retry Question
                 </button>
+              )}
+              {m.role === 'ai' && !m.isError && (
+                <div className="flex gap-2 absolute -bottom-4 -right-4">
+                  <button 
+                    onClick={() => speakResponse(m.text)}
+                    disabled={isSpeaking}
+                    className="w-12 h-12 bg-yellow-400 border-4 border-black rounded-full flex items-center justify-center text-xl shadow-lg hover:scale-110 active:scale-95 transition-all disabled:grayscale"
+                    title="Listen to response (Amharic/Oromiffa supported via Browser fallback)"
+                  >
+                    {isSpeaking ? '⏳' : <Volume2 size={20} />}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -281,7 +466,7 @@ const AITutor: React.FC = () => {
           />
           
           <button 
-            onClick={handleSend} 
+            onClick={() => handleSend()} 
             disabled={isLoading || (!input.trim() && !attachment)} 
             className="bg-blue-600 text-white w-16 h-16 md:w-24 md:h-20 rounded-[2rem] border-4 border-black flex items-center justify-center shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] active:translate-y-2 active:shadow-none transition-all disabled:opacity-50 shrink-0"
             title="Send Message"

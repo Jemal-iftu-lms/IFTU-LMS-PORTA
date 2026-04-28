@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence, browserPopupRedirectResolver } from 'firebase/auth';
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from './firebase-applet-config.json';
@@ -9,11 +9,9 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firestore with long polling for better stability in proxied/iframe environments.
 // Force standardized settings to bypass internal proxy issues.
 export const db = initializeFirestore(app, {
+  host: 'firestore.googleapis.com',
+  ssl: true,
   experimentalForceLongPolling: true,
-  experimentalAutoDetectLongPolling: false,
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  }),
   ignoreUndefinedProperties: true
 }, firebaseConfig.firestoreDatabaseId);
 
@@ -32,12 +30,12 @@ export const reconnectDb = async () => {
     await disableNetwork(db);
     
     // Highly aggressive jitter for Cloud Run performance
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     await enableNetwork(db);
     
     // Minimal handshake wait
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     isReconnecting = false;
     return true;
@@ -50,13 +48,14 @@ export const reconnectDb = async () => {
 };
 
 export const auth = getAuth(app);
-// Explicitly set persistence to local to handle iframe storage issues
+// Explicitly set persistence and resolver to handle iframe storage and popup issues
 setPersistence(auth, browserLocalPersistence).catch(err => console.error("Auth persistence failed:", err));
+(auth as any).config.popupRedirectResolver = browserPopupRedirectResolver;
 
 export const storage = getStorage(app);
 
-// Validate Connection to Firestore
-async function testConnection() {
+// Validate Connection to Firestore and retry if unavailable
+async function testConnection(retries = 3) {
   try {
     // Attempt to fetch a non-existent doc to test connectivity
     // Using getDocFromServer forces a network request
@@ -70,6 +69,12 @@ async function testConnection() {
     }
     
     if (error.code === 'unavailable' || (error.message && error.message.includes('the client is offline'))) {
+      if (retries > 0) {
+        console.warn(`Firestore unavailable, retrying connection (${retries} attempts left)...`);
+        await reconnectDb();
+        await new Promise(r => setTimeout(r, 2000));
+        return testConnection(retries - 1);
+      }
       console.warn("Firestore is currently in offline mode. The app will sync when connection is restored.");
     } else {
       console.error("Firestore connection test failed:", error.message || error);
@@ -77,4 +82,4 @@ async function testConnection() {
   }
 }
 
-testConnection();
+// testConnection();

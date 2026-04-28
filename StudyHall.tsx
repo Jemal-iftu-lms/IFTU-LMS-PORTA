@@ -7,6 +7,7 @@ interface ChatMessage {
   id: string;
   userId: string;
   userName: string;
+  userPhoto?: string;
   text: string;
   timestamp: number;
 }
@@ -27,6 +28,7 @@ interface StudyHallProps {
 export const StudyHall: React.FC<StudyHallProps> = ({ currentUser, lang }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [notes, setNotes] = useState<SharedNote[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'chat' | 'notes'>('chat');
   const [inputText, setInputText] = useState('');
   const [newNoteTitle, setNewNoteTitle] = useState('');
@@ -34,19 +36,33 @@ export const StudyHall: React.FC<StudyHallProps> = ({ currentUser, lang }) => {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsubscribeChat = dbService.subscribeToChat('global-study-hall', (msgs) => {
+    const hallId = 'global-study-hall';
+    
+    // Initial presence
+    dbService.updatePresence(hallId, currentUser);
+    const presenceHeartbeat = setInterval(() => {
+      dbService.updatePresence(hallId, currentUser);
+    }, 60000); // Every minute
+
+    const unsubscribeChat = dbService.subscribeToChat(hallId, (msgs) => {
       setMessages(msgs.sort((a, b) => a.timestamp - b.timestamp));
     });
 
-    const unsubscribeNotes = dbService.subscribeToNotes('global-study-hall', (sharedNotes) => {
+    const unsubscribeNotes = dbService.subscribeToNotes(hallId, (sharedNotes) => {
       setNotes(sharedNotes);
     });
 
+    const unsubscribePresence = dbService.subscribeToPresence(hallId, (users) => {
+      setOnlineUsers(users);
+    });
+
     return () => {
+      clearInterval(presenceHeartbeat);
       unsubscribeChat();
       unsubscribeNotes();
+      unsubscribePresence();
     };
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,6 +73,7 @@ export const StudyHall: React.FC<StudyHallProps> = ({ currentUser, lang }) => {
     const msg: Omit<ChatMessage, 'id'> = {
       userId: currentUser.id,
       userName: currentUser.name,
+      userPhoto: currentUser.photo,
       text: inputText,
       timestamp: Date.now(),
     };
@@ -122,14 +139,42 @@ export const StudyHall: React.FC<StudyHallProps> = ({ currentUser, lang }) => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar: Online Users */}
+        <div className="hidden lg:flex w-64 bg-gray-50 border-r-8 border-black flex-col">
+          <div className="p-6 border-b-4 border-black bg-white flex items-center gap-3">
+             <Users className="text-green-600" size={20} />
+             <h4 className="font-black uppercase text-sm">Active Peers ({onlineUsers.length})</h4>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {onlineUsers.map(user => (
+              <div key={user.id} className="flex items-center gap-3 p-2 rounded-xl bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                <div className="w-8 h-8 rounded-lg border-2 border-black bg-yellow-400 overflow-hidden flex-shrink-0 animate-pulse">
+                  {user.userPhoto ? <img src={user.userPhoto} alt={user.userName} className="w-full h-full object-cover" /> : user.userName[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-black uppercase truncate">{user.userName}</p>
+                  <p className="text-[8px] font-black uppercase text-green-500">Live now</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {activeTab === 'chat' ? (
           <div className="flex-1 flex flex-col bg-gray-50">
             <div className="flex-1 overflow-y-auto p-8 space-y-4">
               {messages.map((m) => (
-                <div key={m.id} className={`flex flex-col ${m.userId === currentUser.id ? 'items-end' : 'items-start'}`}>
-                  <span className="text-[10px] font-black uppercase text-gray-400 mb-1 px-4">{m.userName}</span>
-                  <div className={`max-w-[70%] p-4 rounded-2xl border-4 border-black shadow-md font-black ${m.userId === currentUser.id ? 'bg-green-600 text-white rounded-tr-none' : 'bg-white text-black rounded-tl-none'}`}>
-                    {m.text}
+                <div key={m.id} className={`flex gap-4 ${m.userId === currentUser.id ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {m.userId !== currentUser.id && (
+                    <div className="w-12 h-12 rounded-xl border-4 border-black bg-yellow-400 flex items-center justify-center font-black overflow-hidden shrink-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      {m.userPhoto ? <img src={m.userPhoto} alt={m.userName} className="w-full h-full object-cover" /> : m.userName[0]}
+                    </div>
+                  )}
+                  <div className={`flex flex-col ${m.userId === currentUser.id ? 'items-end' : 'items-start'} max-w-[80%]`}>
+                    <span className="text-[10px] font-black uppercase text-gray-500 mb-1 px-1">{m.userName} • {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <div className={`p-5 rounded-3xl border-4 border-black font-black text-lg ${m.userId === currentUser.id ? 'bg-green-600 text-white rounded-tr-none shadow-[8px_8px_0px_0px_rgba(34,197,94,0.3)]' : 'bg-white text-black rounded-tl-none shadow-[8px_8px_0px_0px_rgba(0,0,0,0.1)]'}`}>
+                      {m.text}
+                    </div>
                   </div>
                 </div>
               ))}
